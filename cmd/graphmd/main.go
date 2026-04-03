@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/graphmd/graphmd/internal/code"
+	"github.com/graphmd/graphmd/internal/code/goparser"
 	"github.com/graphmd/graphmd/internal/knowledge"
 )
 
@@ -62,6 +64,7 @@ func cmdIndex() {
 	skipDiscovery := fs.Bool("skip-discovery", false, "Skip relationship discovery")
 	llmDiscovery := fs.Bool("llm-discovery", false, "Enable LLM-based discovery")
 	minConfidence := fs.Float64("min-confidence", 0.5, "Minimum confidence threshold")
+	analyzeCode := fs.Bool("analyze-code", false, "Analyze source code for infrastructure dependencies")
 
 	fs.Parse(os.Args[2:])
 
@@ -169,6 +172,18 @@ func cmdIndex() {
 	if len(mentions) > 0 {
 		if err := db.SaveComponentMentions(mentions); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to save component mentions: %v\n", err)
+		}
+	}
+
+	// Run code analysis if requested.
+	if *analyzeCode {
+		fmt.Fprintf(os.Stderr, "Analyzing source code...\n")
+		signals, codeErr := code.RunCodeAnalysis(absDir, goparser.NewGoParser())
+		if codeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: code analysis failed: %v\n", codeErr)
+		} else {
+			code.PrintCodeSignalsSummary(os.Stderr, signals)
+			fmt.Fprintf(os.Stderr, "Code analysis: %d signals detected\n", len(signals))
 		}
 	}
 

@@ -3,69 +3,79 @@
 **Defined:** 2026-03-29
 **Core Value:** AI agents can answer "if this fails, what breaks?" by querying a pre-computed dependency graph instead of being fed entire architecture via prompts.
 
-## v1.1 Requirements
+## v2.0 Requirements
 
-Tech debt cleanup from v1.0 audit. Resolve orphaned code, add missing observability, and surface hidden data.
-
-### Dead Code Cleanup
-
-- [x] **DEBT-01**: Remove orphaned ExecuteImpact, ExecuteCrawl, QueryResult, AffectedNode, QueryEdge functions and types, plus their tests
-
-### Query Integrity
-
-- [ ] **DEBT-02**: Report cycles detected during impact/dependencies BFS traversal in JSON envelope (additive CyclesDetected field with omitempty)
-
-### Export Quality
-
-- [x] **DEBT-03**: Warn operators via stderr when SaveGraph drops edges with missing endpoint nodes (count + list at verbose)
-
-### Provenance Access
-
-- [ ] **DEBT-04**: Surface component_mentions data in query results via --include-provenance flag (opt-in to avoid output bloat)
-
-## v2 Requirements
-
-Deferred features for future releases. Not in current roadmap.
-
-### Agent Integration
-
-- **MCP-01**: MCP server wrapper around query interface (for LLM agent integration)
+Code analysis integration and MCP server for LLM agent access.
 
 ### Code Analysis
 
-- **CODE-01**: Code-based dependency inference (service imports, database connections)
-- **CODE-02**: Connection string detection and parsing
+- [x] **CODE-01**: Go language parser detecting imports, HTTP client calls, database connections, message queue producers/consumers, and cache client usage
+- [ ] **CODE-02**: Python language parser detecting imports, HTTP calls (requests/httpx), DB connections (SQLAlchemy/psycopg), queue clients (kafka/pika/boto3 SQS), and cache clients (redis/memcache)
+- [ ] **CODE-03**: JavaScript/TypeScript language parser detecting imports, HTTP calls (fetch/axios), DB connections (pg/mysql2/mongoose), queue clients, and cache clients
+- [ ] **CODE-04**: Connection string detection and parsing across all languages — URLs, DSNs, environment variable references, config file patterns
+- [ ] **CODE-05**: Code comment analysis extracting dependency hints and component references from inline comments and docstrings
+
+### Signal Integration
+
+- [ ] **SIG-01**: Merge code-detected dependency signals with markdown-detected signals using confidence-weighted aggregation (code as 5th discovery source)
+- [ ] **SIG-02**: Schema v6 migration supporting multi-source provenance per relationship (which sources detected each edge)
+
+### MCP Server
+
+- [ ] **MCP-01**: MCP server with stdio transport wrapping query interface — 5 tools: impact, dependencies, path, list, graph_info
+
+## v2.1 Requirements
+
+Deferred features for next release. Not in current roadmap.
+
+### Code Flows
+
+- **FLOW-01**: Function call chain extraction within components
+- **FLOW-02**: Code path mapping from component relationships to specific source locations
+- **FLOW-03**: Cross-service call tracing (HTTP handler → client → remote handler)
+
+### Advanced MCP
+
+- **MCP-02**: Streamable HTTP transport for MCP server
+- **MCP-03**: Structured outputSchema for each MCP tool
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Terraform/CloudFormation/K8s manifest parsing | v2+ complexity; markdown-only sufficient |
-| Docker Compose parsing | Same as IaC; defer to v2 |
-| Human-facing visualization | Optimized for AI agents |
-| Real-time sync or incremental updates | Batch export/import model sufficient |
-| Refactoring query_cli.go type hierarchy | Scope creep risk; types work correctly |
-| Auto-fixing dangling edges | Creates phantom components |
-| Auto-breaking cycles | Cycles are real in infrastructure |
+| Terraform/CloudFormation/K8s manifest parsing | IaC is a different domain; code + markdown sufficient |
+| Docker Compose parsing | Same as IaC |
+| Full AST type resolution | Over-engineering for dependency detection; pattern matching sufficient |
+| Runtime/dynamic analysis | Static analysis only for v2.0 |
+| Real-time file watching | Batch analysis sufficient |
+| CGo-based tree-sitter | Breaks pure-Go build; regex-first for Python/JS |
+| Natural language query via MCP | LLM is the NLP layer; tools provide structured access |
+| SSE/HTTP MCP transport | Stdio sufficient for v2.0; HTTP in v2.1 |
 
 ## Traceability
 
 | Requirement | Phase | Phase Name | Status |
 |-------------|-------|------------|--------|
-| DEBT-01 | 6 | Dead Code Removal | Pending |
-| DEBT-02 | 7 | Silent Loss Reporting | Pending |
-| DEBT-03 | 7 | Silent Loss Reporting | Pending |
-| DEBT-04 | 8 | Provenance Access | Pending |
+| CODE-01 | 9 | Code Analysis Foundation | Pending |
+| CODE-02 | 10 | Python + JS/TS Parsers | Pending |
+| CODE-03 | 10 | Python + JS/TS Parsers | Pending |
+| CODE-04 | 11 | Connection Strings + Comment Analysis | Pending |
+| CODE-05 | 11 | Connection Strings + Comment Analysis | Pending |
+| SIG-01 | 12 | Signal Integration | Pending |
+| SIG-02 | 12 | Signal Integration | Pending |
+| MCP-01 | 13 | MCP Server | Pending |
 
 **Coverage:**
-- v1.1 requirements: 4 total
-- Mapped to phases: 4
+- v2.0 requirements: 8 total
+- Mapped to phases: 8
 - Unmapped: 0
 
 **Phase dependencies:**
-- Phase 6: None (first v1.1 phase)
-- Phase 7: Phase 6 (clean codebase, no orphaned types to confuse modifications)
-- Phase 8: Phase 7 (touches same BFS functions that Phase 7 modifies for cycle detection)
+- Phase 9: None (first v2.0 phase; builds on v1.1 foundation)
+- Phase 10: Phase 9 (LanguageParser interface defined there)
+- Phase 11: Phase 10 (connection strings work across all 3 language parsers)
+- Phase 12: Phase 11 (all code signals must exist before merging with markdown)
+- Phase 13: Phase 12 (MCP queries enriched hybrid graph)
 
 ---
 *Requirements defined: 2026-03-29*

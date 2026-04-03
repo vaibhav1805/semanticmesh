@@ -15,6 +15,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/graphmd/graphmd/internal/code"
+	"github.com/graphmd/graphmd/internal/code/goparser"
 )
 
 // ExportArgs holds parsed arguments for CmdExport.
@@ -29,6 +32,7 @@ type ExportArgs struct {
 	SkipDiscovery bool    // skip relationship discovery algorithms
 	LLMDiscovery  bool    // enable LLM-based discovery (opt-in, default off)
 	MinConfidence float64 // minimum confidence threshold for discovered edges
+	AnalyzeCode   bool    // analyze source code for infrastructure dependencies
 }
 
 // ExportMetadata is the metadata stored in metadata.json inside the ZIP archive.
@@ -76,6 +80,7 @@ func ParseExportArgs(args []string) (*ExportArgs, error) {
 	fs.BoolVar(&a.SkipDiscovery, "skip-discovery", false, "Skip relationship discovery algorithms")
 	fs.BoolVar(&a.LLMDiscovery, "llm-discovery", false, "Enable LLM-based discovery (opt-in)")
 	fs.Float64Var(&a.MinConfidence, "min-confidence", 0.5, "Minimum confidence threshold for discovered edges")
+	fs.BoolVar(&a.AnalyzeCode, "analyze-code", false, "Analyze source code for infrastructure dependencies")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("export: %w", err)
@@ -214,6 +219,18 @@ func CmdExport(args []string) error {
 			if de.Edge != nil && de.Edge.Confidence >= a.MinConfidence {
 				_ = graph.AddEdge(de.Edge)
 			}
+		}
+	}
+
+	// Step 7b: Run code analysis if requested.
+	if a.AnalyzeCode {
+		fmt.Fprintf(os.Stderr, "  Analyzing source code...\n")
+		signals, codeErr := code.RunCodeAnalysis(absFrom, goparser.NewGoParser())
+		if codeErr != nil {
+			fmt.Fprintf(os.Stderr, "  Warning: code analysis failed: %v\n", codeErr)
+		} else {
+			code.PrintCodeSignalsSummary(os.Stderr, signals)
+			fmt.Fprintf(os.Stderr, "  Code analysis: %d signals detected\n", len(signals))
 		}
 	}
 

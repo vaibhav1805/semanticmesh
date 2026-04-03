@@ -1,52 +1,54 @@
-# Project State
+# Project State: graphmd v2.0
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI agents can answer "if this fails, what breaks?" by querying a pre-computed dependency graph
-**Current focus:** Phase 7 — Silent Loss Reporting (v1.1 Tech Debt Cleanup)
+**Current focus:** Phase 10 - Python/JS Parsers (next)
 
 ## Current Position
 
-Phase: 7 of 8 (Silent Loss Reporting)
-Plan: 2 of 2 in current phase
-Status: Phase 7 complete
-Last activity: 2026-03-29 — Completed 07-02-PLAN.md
+Phase: 9 of 13 (Code Analysis Foundation) — COMPLETE
+Plan: 2 of 2 complete
+Status: Phase complete
+Last activity: 2026-03-30 — Phase 9 complete (CLI integration with --analyze-code flag)
 
-Progress: [██████████] 100% (Phase 7)
+Progress: [█████████████████░░░] 84% (21/~25 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15 (v1.0)
-- Average duration: carried from v1.0
-- Total execution time: carried from v1.0
+- Total plans completed: 21 (v1.0: 15, v1.1: 4, v2.0: 2)
+- Total execution time: see milestone records
 
-**By Phase:**
+**By Phase (v1.1 — most recent):**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1-5 (v1.0) | 15 | — | — |
-| 6. Dead Code Removal | 1/1 | 2min | 2min |
-| 7. Silent Loss Reporting | 2/2 | 4min | 2min |
-| 8. Provenance Access | 0/1 | — | — |
-
-*Updated after each plan completion*
-| Phase 06 P01 | 2min | 2 tasks | 4 files |
-| Phase 07 P02 | 4min | 1 task | 2 files |
+| Phase | Plans | Status |
+|-------|-------|--------|
+| 6. Dead Code Removal | 1 | Complete |
+| 7. Silent Loss Reporting | 2 | Complete |
+| 8. Provenance Access | 1 | Complete |
+| 9. Code Analysis Foundation | 2/2 | Complete |
 
 ## Accumulated Context
 
 ### Decisions
 
-- v1.0 shipped 2026-03-28 with 18/18 requirements, 5 phases, 15 plans
-- All code in single package `internal/knowledge`
-- Schema version is 5
-- commit_docs: false
-- Branching strategy: none
-- [Phase 06]: Removed ~700 lines dead query code (ExecuteImpact/ExecuteCrawl/QueryResult/AffectedNode/QueryEdge) — single query type hierarchy via query_cli.go
-- [Phase 07]: SaveGraph now warns to stderr when edges are dropped due to missing endpoint nodes (stderrWriter pattern for test capture)
+- v1.0 shipped 2026-03-28: 18 requirements, 5 phases, 15 plans
+- v1.1 shipped 2026-03-29: 4 requirements, 3 phases, 4 plans
+- Code flows (function call chains) deferred to v2.1
+- Go parser uses stdlib go/ast (no CGo) — proves LanguageParser interface before Python/JS
+- Python/JS use regex-first approach; tree-sitter deferred to v2.1 if needed
+- Signal merging isolated in Phase 12 (highest risk)
+- MCP server last (Phase 13) — queries enriched hybrid graph
+- Schema v6: source_type column + code_signals table
+- CGo-free build maintained throughout v2.0
+- Version-aware import path resolution for Go modules (vN -> parent package name)
+- Pattern table keyed by importPath.Function for O(1) lookup during AST walk
+- Comment hints at 0.4 confidence to distinguish from code-level detection
+- Variadic parser args on RunCodeAnalysis to avoid import cycle (code <-> goparser)
+- Code signals printed to stderr as diagnostic output; graph integration deferred to Phase 12
 
 ### Pending Todos
 
@@ -58,6 +60,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-29
-Stopped at: Completed 07-02-PLAN.md — Phase 7 complete
+Last session: 2026-03-30
+Stopped at: Completed 09-02-PLAN.md (CLI integration with --analyze-code flag) — Phase 9 complete
 Resume file: None

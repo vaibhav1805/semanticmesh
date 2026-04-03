@@ -1,0 +1,257 @@
+package goparser
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"net/url"
+	"path/filepath"
+	"strings"
+
+	"github.com/graphmd/graphmd/internal/code"
+)
+
+// Compile-time check that GoParser implements code.LanguageParser.
+var _ code.LanguageParser = (*GoParser)(nil)
+
+// GoParser analyzes Go source files for infrastructure dependency signals
+// using the standard library's go/ast package.
+type GoParser struct {
+	patterns map[string]DetectionPattern // "importPath.Function" -> pattern
+}
+
+// NewGoParser creates a GoParser with the default detection patterns.
+func NewGoParser() *GoParser {
+	return &GoParser{
+		patterns: buildPatternIndex(DefaultPatterns),
+	}
+}
+
+// Name returns "go".
+func (p *GoParser) Name() string { return "go" }
+
+// Extensions returns [".go"].
+func (p *GoParser) Extensions() []string { return []string{".go"} }
+
+// ParseFile analyzes a Go source file and returns detected infrastructure signals.
+// Returns nil, nil for test files (*_test.go).
+func (p *GoParser) ParseFile(filePath string, content []byte) ([]code.CodeSignal, error) {
+	// Skip test files
+	if strings.HasSuffix(filePath, "_test.go") {
+		return nil, nil
+	}
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filePath, content, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build import alias map: local name -> full import path
+	importMap := buildImportMap(f)
+
+	var signals []code.CodeSignal
+
+	// Walk AST for function calls matching patterns
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+
+		ident, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+
+		// Resolve local package name to import path
+		importPath, ok := importMap[ident.Name]
+		if !ok {
+			return true
+		}
+
+		// Look up pattern
+		key := importPath + "." + sel.Sel.Name
+		pattern, ok := p.patterns[key]
+		if !ok {
+			return true
+		}
+
+		// Extract target component
+		target := extractTarget(call, pattern)
+
+		lineNum := fset.Position(call.Pos()).Line
+
+		signals = append(signals, code.CodeSignal{
+			LineNumber:      lineNum,
+			TargetComponent: target,
+			TargetType:      pattern.TargetType,
+			DetectionKind:   pattern.Kind,
+			Evidence:        evidenceSnippet(content, lineNum),
+			Language:        "go",
+			Confidence:      pattern.Confidence,
+		})
+
+		return true
+	})
+
+	// Scan comments for dependency hints
+	for _, cg := range f.Comments {
+		for _, c := range cg.List {
+			matches := commentHintPattern.FindStringSubmatch(c.Text)
+			if len(matches) < 2 {
+				continue
+			}
+
+			lineNum := fset.Position(c.Pos()).Line
+			signals = append(signals, code.CodeSignal{
+				LineNumber:      lineNum,
+				TargetComponent: matches[1],
+				TargetType:      "unknown",
+				DetectionKind:   "comment_hint",
+				Evidence:        evidenceSnippet(content, lineNum),
+				Language:        "go",
+				Confidence:      0.4,
+			})
+		}
+	}
+
+	return signals, nil
+}
+
+// buildImportMap creates a mapping from local package name to full import path,
+// handling renamed imports (e.g., pg "database/sql").
+func buildImportMap(f *ast.File) map[string]string {
+	m := make(map[string]string)
+	for _, imp := range f.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+
+		var localName string
+		if imp.Name != nil {
+			localName = imp.Name.Name
+		} else {
+			localName = defaultPackageName(path)
+		}
+
+		m[localName] = path
+	}
+	return m
+}
+
+// defaultPackageName infers the Go package name from an import path.
+// Handles versioned paths (e.g., "github.com/redis/go-redis/v9" -> "redis")
+// and paths ending in .go (e.g., "github.com/nats-io/nats.go" -> "nats").
+func defaultPackageName(importPath string) string {
+	base := filepath.Base(importPath)
+
+	// Handle versioned modules: if last segment is vN, use the previous segment
+	if isVersionSegment(base) {
+		parts := strings.Split(importPath, "/")
+		if len(parts) >= 2 {
+			base = parts[len(parts)-2]
+		}
+	}
+
+	// Handle paths ending in .go (e.g., nats.go -> nats)
+	base = strings.TrimSuffix(base, ".go")
+
+	// Handle hyphenated package names: go-redis -> redis
+	// In Go, hyphens aren't valid in package names, so the actual package name
+	// is typically the last segment without the prefix before the hyphen.
+	// However, the convention varies. For common patterns like "go-redis",
+	// the package name is "redis". We use the part after the last hyphen.
+	if idx := strings.LastIndex(base, "-"); idx >= 0 {
+		candidate := base[idx+1:]
+		if len(candidate) > 0 {
+			base = candidate
+		}
+	}
+
+	return base
+}
+
+// isVersionSegment returns true if s looks like a Go module version segment (v2, v9, etc.)
+func isVersionSegment(s string) bool {
+	if len(s) < 2 || s[0] != 'v' {
+		return false
+	}
+	for _, c := range s[1:] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// extractTarget determines the target component name from the call arguments.
+func extractTarget(call *ast.CallExpr, pattern DetectionPattern) string {
+	if pattern.ArgIndex >= 0 && pattern.ArgIndex < len(call.Args) {
+		if host := extractURLHost(call, pattern.ArgIndex); host != "" {
+			return host
+		}
+		// For db_connection, try to extract driver name from first arg
+		if pattern.Kind == "db_connection" && pattern.ArgIndex == 1 && len(call.Args) > 0 {
+			if lit, ok := call.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+				driver := strings.Trim(lit.Value, `"`)
+				return driver
+			}
+		}
+	}
+
+	// Fallback: derive generic name from import path
+	parts := strings.Split(pattern.ImportPath, "/")
+	lastPart := parts[len(parts)-1]
+	// Clean up version suffixes like "v9", "v8"
+	if len(lastPart) > 1 && lastPart[0] == 'v' && lastPart[1] >= '0' && lastPart[1] <= '9' {
+		if len(parts) >= 2 {
+			lastPart = parts[len(parts)-2]
+		}
+	}
+	return lastPart
+}
+
+// extractURLHost extracts the hostname from a URL string literal argument.
+func extractURLHost(call *ast.CallExpr, argIndex int) string {
+	if argIndex >= len(call.Args) {
+		return ""
+	}
+
+	lit, ok := call.Args[argIndex].(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return ""
+	}
+
+	raw := strings.Trim(lit.Value, `"`)
+
+	// Try parsing as URL
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+
+	host := u.Hostname()
+	if host != "" {
+		return host
+	}
+
+	return ""
+}
+
+// evidenceSnippet returns the source line at lineNum (1-based), trimmed, max 200 chars.
+func evidenceSnippet(content []byte, lineNum int) string {
+	lines := strings.Split(string(content), "\n")
+	if lineNum < 1 || lineNum > len(lines) {
+		return ""
+	}
+
+	line := strings.TrimSpace(lines[lineNum-1])
+	if len(line) > 200 {
+		line = line[:200]
+	}
+	return line
+}

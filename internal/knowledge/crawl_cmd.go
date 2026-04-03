@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/graphmd/graphmd/internal/code"
+	"github.com/graphmd/graphmd/internal/code/goparser"
 )
 
 // ErrLegacyCrawl is a sentinel error returned by CmdCrawl when the
@@ -22,6 +25,7 @@ type CrawlArgs struct {
 	Input        string // source directory (--input flag)
 	Format       string // output format: text or json (--format flag)
 	FromMultiple string // backward compat for targeted traversal (--from-multiple flag)
+	AnalyzeCode  bool   // analyze source code for infrastructure dependencies
 }
 
 // ParseCrawlArgs parses raw CLI arguments for the crawl command.
@@ -33,6 +37,7 @@ func ParseCrawlArgs(args []string) (*CrawlArgs, error) {
 	fs.StringVar(&a.Input, "input", ".", "Source directory to crawl")
 	fs.StringVar(&a.Format, "format", "text", "Output format: text or json")
 	fs.StringVar(&a.FromMultiple, "from-multiple", "", "Comma-separated starting files (legacy targeted traversal)")
+	fs.BoolVar(&a.AnalyzeCode, "analyze-code", false, "Analyze source code for infrastructure dependencies")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("crawl: %w", err)
@@ -137,6 +142,18 @@ func CmdCrawl(args []string) error {
 	for _, de := range discovered {
 		if de.Edge != nil && de.Edge.Confidence >= 0.5 {
 			_ = graph.AddEdge(de.Edge)
+		}
+	}
+
+	// Step 7b: Run code analysis if requested (only for directories, not ZIPs).
+	if a.AnalyzeCode {
+		fmt.Fprintf(os.Stderr, "  Analyzing source code...\n")
+		signals, codeErr := code.RunCodeAnalysis(absInput, goparser.NewGoParser())
+		if codeErr != nil {
+			fmt.Fprintf(os.Stderr, "  Warning: code analysis failed: %v\n", codeErr)
+		} else {
+			code.PrintCodeSignalsSummary(os.Stderr, signals)
+			fmt.Fprintf(os.Stderr, "  Code analysis: %d signals detected\n", len(signals))
 		}
 	}
 
