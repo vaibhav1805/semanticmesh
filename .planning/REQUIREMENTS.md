@@ -17,8 +17,8 @@ Code analysis integration and MCP server for LLM agent access.
 
 ### Signal Integration
 
-- [ ] **SIG-01**: Merge code-detected dependency signals with markdown-detected signals using confidence-weighted aggregation (code as 5th discovery source)
-- [ ] **SIG-02**: Schema v6 migration supporting multi-source provenance per relationship (which sources detected each edge)
+- [x] **SIG-01**: Merge code-detected dependency signals with markdown-detected signals using confidence-weighted aggregation (code as 5th discovery source)
+- [x] **SIG-02**: Schema v6 migration supporting multi-source provenance per relationship (which sources detected each edge)
 
 ### MCP Server
 

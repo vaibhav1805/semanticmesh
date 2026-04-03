@@ -25,6 +25,10 @@ const (
 
 	// SignalLLM is a relationship inferred by an LLM (PageIndex, 0.65).
 	SignalLLM SignalSource = "llm"
+
+	// SignalCode is a relationship detected from source code analysis
+	// (import statements, function calls, connection strings).
+	SignalCode SignalSource = "code"
 )
 
 // ComponentTypeAPI is an alias for ComponentTypeGateway, preserved for

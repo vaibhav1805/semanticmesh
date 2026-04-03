@@ -33,6 +33,7 @@ type QueryEnvelopeParams struct {
 	To            string  `json:"to,omitempty"`
 	Depth         int     `json:"depth,omitempty"`
 	MinConfidence float64 `json:"min_confidence,omitempty"`
+	SourceType    string  `json:"source_type,omitempty"`
 }
 
 // QueryEnvelopeMetadata contains graph-level metadata for the response.
@@ -56,6 +57,7 @@ type EnrichedRelationship struct {
 	Type             string  `json:"type"`
 	SourceFile       string  `json:"source_file"`
 	ExtractionMethod string  `json:"extraction_method"`
+	SourceType       string  `json:"source_type"`
 }
 
 // --- Path result types -------------------------------------------------------
@@ -182,6 +184,7 @@ func cmdQueryImpact(args []string) error {
 	component := fs.String("component", "", "Component to query impact for (required)")
 	depthStr := fs.String("depth", "1", "Traversal depth (integer or \"all\")")
 	minConf := fs.Float64("min-confidence", 0, "Minimum confidence threshold")
+	sourceType := fs.String("source-type", "", "Filter by detection source: markdown, code, both")
 	graphName := fs.String("graph", "", "Named graph to query")
 	format := fs.String("format", "json", "Output format: json or table")
 	includeProvenance := fs.Bool("include-provenance", false, "Include detection provenance (mentions) for each node")
@@ -193,6 +196,10 @@ func cmdQueryImpact(args []string) error {
 
 	if *component == "" {
 		return writeErrorJSONStdout("--component is required", "MISSING_ARG", nil)
+	}
+
+	if msg := validateSourceType(*sourceType); msg != "" {
+		return writeErrorJSONStdout(msg, "INVALID_ARG", nil)
 	}
 
 	depth, err := parseDepth(*depthStr)
@@ -216,7 +223,7 @@ func cmdQueryImpact(args []string) error {
 	}
 
 	// Impact = reverse traversal: follow ByTarget to find things that depend on this component.
-	affectedNodes, relationships, cycles := executeImpactReverse(g, *component, depth, minConf)
+	affectedNodes, relationships, cycles := executeImpactReverse(g, *component, depth, minConf, *sourceType)
 
 	// Decorate with provenance if requested.
 	if *includeProvenance {
@@ -247,6 +254,7 @@ func cmdQueryImpact(args []string) error {
 			Component:     *component,
 			Depth:         depth,
 			MinConfidence: confParam,
+			SourceType:    *sourceType,
 		},
 		Results:  result,
 		Metadata: md,
@@ -264,6 +272,7 @@ func cmdQueryDependencies(args []string) error {
 	component := fs.String("component", "", "Component to query dependencies for (required)")
 	depthStr := fs.String("depth", "1", "Traversal depth (integer or \"all\")")
 	minConf := fs.Float64("min-confidence", 0, "Minimum confidence threshold")
+	sourceType := fs.String("source-type", "", "Filter by detection source: markdown, code, both")
 	graphName := fs.String("graph", "", "Named graph to query")
 	format := fs.String("format", "json", "Output format: json or table")
 	includeProvenance := fs.Bool("include-provenance", false, "Include detection provenance (mentions) for each node")
@@ -275,6 +284,10 @@ func cmdQueryDependencies(args []string) error {
 
 	if *component == "" {
 		return writeErrorJSONStdout("--component is required", "MISSING_ARG", nil)
+	}
+
+	if msg := validateSourceType(*sourceType); msg != "" {
+		return writeErrorJSONStdout(msg, "INVALID_ARG", nil)
 	}
 
 	depth, err := parseDepth(*depthStr)
@@ -298,7 +311,7 @@ func cmdQueryDependencies(args []string) error {
 	}
 
 	// Dependencies = forward traversal: follow BySource to find what this component depends on.
-	affectedNodes, relationships, cycles := executeForwardTraversal(g, *component, depth, minConf)
+	affectedNodes, relationships, cycles := executeForwardTraversal(g, *component, depth, minConf, *sourceType)
 
 	// Decorate with provenance if requested.
 	if *includeProvenance {
@@ -329,6 +342,7 @@ func cmdQueryDependencies(args []string) error {
 			Component:     *component,
 			Depth:         depth,
 			MinConfidence: confParam,
+			SourceType:    *sourceType,
 		},
 		Results:  result,
 		Metadata: md,
@@ -347,6 +361,7 @@ func cmdQueryPath(args []string) error {
 	to := fs.String("to", "", "Target component (required)")
 	limit := fs.Int("limit", 10, "Maximum number of paths to return")
 	minConf := fs.Float64("min-confidence", 0, "Minimum confidence per hop")
+	sourceType := fs.String("source-type", "", "Filter by detection source: markdown, code, both")
 	graphName := fs.String("graph", "", "Named graph to query")
 	format := fs.String("format", "json", "Output format: json or table")
 
@@ -356,6 +371,10 @@ func cmdQueryPath(args []string) error {
 
 	if *from == "" || *to == "" {
 		return writeErrorJSONStdout("--from and --to are required", "MISSING_ARG", nil)
+	}
+
+	if msg := validateSourceType(*sourceType); msg != "" {
+		return writeErrorJSONStdout(msg, "INVALID_ARG", nil)
 	}
 
 	g, meta, err := LoadStoredGraph(*graphName)
@@ -384,9 +403,9 @@ func cmdQueryPath(args []string) error {
 
 	var pathInfos []PathInfo
 	for _, nodePath := range rawPaths {
-		hops, totalConf, valid := buildHops(g, nodePath, *minConf)
+		hops, totalConf, valid := buildHopsWithFilter(g, nodePath, *minConf, *sourceType)
 		if !valid {
-			continue // some hop below min-confidence
+			continue // some hop below min-confidence or filtered by source type
 		}
 		pathInfos = append(pathInfos, PathInfo{
 			Nodes:           nodePath,
@@ -429,6 +448,7 @@ func cmdQueryPath(args []string) error {
 			From:          *from,
 			To:            *to,
 			MinConfidence: confParam,
+			SourceType:    *sourceType,
 		},
 		Results:  result,
 		Metadata: buildMetadata(g, meta, *graphName, elapsed),
@@ -446,11 +466,16 @@ func cmdQueryList(args []string) error {
 
 	typeName := fs.String("type", "", "Filter by component type")
 	minConf := fs.Float64("min-confidence", 0, "Minimum confidence for connected edges")
+	sourceType := fs.String("source-type", "", "Filter by detection source: markdown, code, both")
 	graphName := fs.String("graph", "", "Named graph to query")
 	format := fs.String("format", "json", "Output format: json or table")
 
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("query list: %w", err)
+	}
+
+	if msg := validateSourceType(*sourceType); msg != "" {
+		return writeErrorJSONStdout(msg, "INVALID_ARG", nil)
 	}
 
 	g, meta, err := LoadStoredGraph(*graphName)
@@ -492,6 +517,28 @@ func cmdQueryList(args []string) error {
 			}
 		}
 
+		// Source-type filter: only include nodes where at least one connected edge matches.
+		if *sourceType != "" {
+			hasMatchingEdge := false
+			for _, e := range g.BySource[id] {
+				if matchesSourceTypeFilter(e, *sourceType) {
+					hasMatchingEdge = true
+					break
+				}
+			}
+			if !hasMatchingEdge {
+				for _, e := range g.ByTarget[id] {
+					if matchesSourceTypeFilter(e, *sourceType) {
+						hasMatchingEdge = true
+						break
+					}
+				}
+			}
+			if !hasMatchingEdge {
+				continue
+			}
+		}
+
 		nodeType := string(node.ComponentType)
 		if nodeType == "" {
 			nodeType = "unknown"
@@ -529,6 +576,7 @@ func cmdQueryList(args []string) error {
 		Query: QueryEnvelopeParams{
 			Type:          "list",
 			MinConfidence: confParam,
+			SourceType:    *sourceType,
 		},
 		Results:  result,
 		Metadata: buildMetadata(g, meta, *graphName, elapsed),
@@ -603,7 +651,7 @@ func loadMentionsForGraph(graphName string) map[string][]ComponentMention {
 
 // executeImpactReverse performs BFS following ByTarget (incoming edges) to find
 // components that depend on root. This answers "if root fails, what breaks?"
-func executeImpactReverse(g *Graph, root string, maxDepth int, minConf *float64) ([]ImpactNode, []EnrichedRelationship, []CycleEntry) {
+func executeImpactReverse(g *Graph, root string, maxDepth int, minConf *float64, sourceTypeFilter string) ([]ImpactNode, []EnrichedRelationship, []CycleEntry) {
 	type entry struct {
 		id    string
 		depth int
@@ -626,6 +674,9 @@ func executeImpactReverse(g *Graph, root string, maxDepth int, minConf *float64)
 		// Follow incoming edges: things that depend on cur.id.
 		for _, edge := range g.ByTarget[cur.id] {
 			if minConf != nil && *minConf > 0 && edge.Confidence < *minConf {
+				continue
+			}
+			if !matchesSourceTypeFilter(edge, sourceTypeFilter) {
 				continue
 			}
 			if !visited[edge.Source] {
@@ -654,6 +705,7 @@ func executeImpactReverse(g *Graph, root string, maxDepth int, minConf *float64)
 					Type:             string(edge.Type),
 					SourceFile:       edge.SourceFile,
 					ExtractionMethod: edge.ExtractionMethod,
+					SourceType:       edgeSourceType(edge),
 				})
 
 				queue = append(queue, entry{id: edge.Source, depth: dist})
@@ -678,7 +730,7 @@ func executeImpactReverse(g *Graph, root string, maxDepth int, minConf *float64)
 
 // executeForwardTraversal performs BFS following BySource (outgoing edges) to find
 // what root depends on. This answers "what does root need to work?"
-func executeForwardTraversal(g *Graph, root string, maxDepth int, minConf *float64) ([]ImpactNode, []EnrichedRelationship, []CycleEntry) {
+func executeForwardTraversal(g *Graph, root string, maxDepth int, minConf *float64, sourceTypeFilter string) ([]ImpactNode, []EnrichedRelationship, []CycleEntry) {
 	type entry struct {
 		id    string
 		depth int
@@ -701,6 +753,9 @@ func executeForwardTraversal(g *Graph, root string, maxDepth int, minConf *float
 		// Follow outgoing edges: things that cur.id depends on.
 		for _, edge := range g.BySource[cur.id] {
 			if minConf != nil && *minConf > 0 && edge.Confidence < *minConf {
+				continue
+			}
+			if !matchesSourceTypeFilter(edge, sourceTypeFilter) {
 				continue
 			}
 			if !visited[edge.Target] {
@@ -729,6 +784,7 @@ func executeForwardTraversal(g *Graph, root string, maxDepth int, minConf *float
 					Type:             string(edge.Type),
 					SourceFile:       edge.SourceFile,
 					ExtractionMethod: edge.ExtractionMethod,
+					SourceType:       edgeSourceType(edge),
 				})
 
 				queue = append(queue, entry{id: edge.Target, depth: dist})
@@ -857,6 +913,45 @@ func suggestComponents(g *Graph, query string) []string {
 
 // --- Helpers -----------------------------------------------------------------
 
+// edgeSourceType returns the edge's source_type, defaulting to "markdown" for
+// pre-v6 graphs where SourceType is empty.
+func edgeSourceType(e *Edge) string {
+	if e.SourceType == "" {
+		return "markdown"
+	}
+	return e.SourceType
+}
+
+// matchesSourceTypeFilter returns true if the edge passes the --source-type filter.
+// Empty filter matches all edges.
+// "code" matches edges with source_type "code" or "both" (code was involved).
+// "markdown" matches edges with source_type "markdown" or "both" (markdown was involved).
+// "both" matches only edges with source_type "both" (both sources corroborated).
+func matchesSourceTypeFilter(e *Edge, filter string) bool {
+	if filter == "" {
+		return true
+	}
+	st := edgeSourceType(e)
+	switch filter {
+	case "code":
+		return st == "code" || st == "both"
+	case "markdown":
+		return st == "markdown" || st == "both"
+	case "both":
+		return st == "both"
+	}
+	return true
+}
+
+// validateSourceType checks that the --source-type flag value is valid.
+// Returns an error string for invalid values, empty string for valid ones.
+func validateSourceType(st string) string {
+	if st == "" || st == "markdown" || st == "code" || st == "both" {
+		return ""
+	}
+	return fmt.Sprintf("invalid --source-type %q: must be markdown, code, or both", st)
+}
+
 func parseDepth(s string) (int, error) {
 	if s == "all" {
 		return 100, nil
@@ -893,7 +988,7 @@ func buildMetadata(g *Graph, meta *ExportMetadata, graphName string, elapsedMs i
 	return m
 }
 
-func buildHops(g *Graph, nodePath []string, minConf float64) ([]HopInfo, float64, bool) {
+func buildHopsWithFilter(g *Graph, nodePath []string, minConf float64, sourceTypeFilter string) ([]HopInfo, float64, bool) {
 	var hops []HopInfo
 	totalConf := 1.0
 
@@ -910,29 +1005,29 @@ func buildHops(g *Graph, nodePath []string, minConf float64) ([]HopInfo, float64
 			}
 		}
 
-		conf := 0.0
-		var sf, em string
-		if foundEdge != nil {
-			conf = foundEdge.Confidence
-			sf = foundEdge.SourceFile
-			em = foundEdge.ExtractionMethod
-		}
-
-		if minConf > 0 && conf < minConf {
+		if foundEdge == nil {
 			return nil, 0, false
 		}
 
-		tier := safeScoreToTier(conf)
+		if minConf > 0 && foundEdge.Confidence < minConf {
+			return nil, 0, false
+		}
+
+		if !matchesSourceTypeFilter(foundEdge, sourceTypeFilter) {
+			return nil, 0, false
+		}
+
+		tier := safeScoreToTier(foundEdge.Confidence)
 
 		hops = append(hops, HopInfo{
 			From:             from,
 			To:               to,
-			Confidence:       conf,
+			Confidence:       foundEdge.Confidence,
 			ConfidenceTier:   string(tier),
-			SourceFile:       sf,
-			ExtractionMethod: em,
+			SourceFile:       foundEdge.SourceFile,
+			ExtractionMethod: foundEdge.ExtractionMethod,
 		})
-		totalConf *= conf
+		totalConf *= foundEdge.Confidence
 	}
 
 	return hops, totalConf, true
@@ -1072,14 +1167,18 @@ Subcommands:
   list            List components with optional filters
 
 Global flags:
-  --graph <name>         Select a named graph (default: most recent import)
-  --min-confidence <f>   Filter relationships below threshold
-  --format json|table    Output format (default: json)
+  --graph <name>              Select a named graph (default: most recent import)
+  --min-confidence <f>        Filter relationships below threshold
+  --source-type <s>           Filter by detection source: markdown, code, both
+  --format json|table         Output format (default: json)
+
+The --min-confidence and --source-type filters compose independently:
+an edge must pass both filters to appear in results.
 
 Examples:
   graphmd query impact --component payment-api
   graphmd query impact --component primary-db --depth all
-  graphmd query dependencies --component web-frontend --depth all
+  graphmd query dependencies --component web-frontend --source-type code
   graphmd query path --from web-frontend --to primary-db
   graphmd query list --type service --min-confidence 0.7
 `)

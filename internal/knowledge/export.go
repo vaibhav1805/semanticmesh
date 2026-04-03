@@ -214,9 +214,10 @@ func CmdExport(args []string) error {
 	}
 
 	// Step 7: Run discovery algorithms (unless skipped).
+	var discovered []*DiscoveredEdge
 	if !a.SkipDiscovery {
 		fmt.Fprintf(os.Stderr, "  Running discovery algorithms...\n")
-		discovered := DiscoverRelationships(docs, nil)
+		discovered = DiscoverRelationships(docs, nil)
 		for _, de := range discovered {
 			if de.Edge != nil && de.Edge.Confidence >= a.MinConfidence {
 				_ = graph.AddEdge(de.Edge)
@@ -224,7 +225,9 @@ func CmdExport(args []string) error {
 		}
 	}
 
-	// Step 7b: Run code analysis if requested.
+	// Step 7b: Run code analysis if requested — integrate signals into graph.
+	var codeSignals []code.CodeSignal
+	var codeSourceComponent string
 	if a.AnalyzeCode {
 		fmt.Fprintf(os.Stderr, "  Analyzing source code...\n")
 		signals, codeErr := code.RunCodeAnalysis(absFrom,
@@ -236,7 +239,11 @@ func CmdExport(args []string) error {
 			fmt.Fprintf(os.Stderr, "  Warning: code analysis failed: %v\n", codeErr)
 		} else {
 			code.PrintCodeSignalsSummary(os.Stderr, signals)
-			fmt.Fprintf(os.Stderr, "  Code analysis: %d signals detected\n", len(signals))
+			codeSignals = signals
+			codeSourceComponent = code.InferSourceComponent(absFrom)
+			discovered = integrateCodeSignals(graph, discovered, signals, codeSourceComponent)
+			fmt.Fprintf(os.Stderr, "  Code analysis: %d signals → %d total merged edges\n",
+				len(signals), len(discovered))
 		}
 	}
 
@@ -262,6 +269,13 @@ func CmdExport(args []string) error {
 	if len(mentions) > 0 {
 		if err := db.SaveComponentMentions(mentions); err != nil {
 			fmt.Fprintf(os.Stderr, "  Warning: failed to save component mentions: %v\n", err)
+		}
+	}
+
+	// Save raw code signals for provenance (after DB is created and graph saved).
+	if len(codeSignals) > 0 {
+		if err := db.SaveCodeSignals(codeSignals, codeSourceComponent); err != nil {
+			fmt.Fprintf(os.Stderr, "  Warning: failed to save code signals: %v\n", err)
 		}
 	}
 

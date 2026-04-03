@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI agents can answer "if this fails, what breaks?" by querying a pre-computed dependency graph
-**Current focus:** Phase 11 - Connection Strings + Comment Analysis
+**Current focus:** Phase 13 - MCP Server
 
 ## Current Position
 
-Phase: 11 of 13 (Connection Strings + Comment Analysis)
-Plan: 3 of 3 complete
-Status: Phase 11 complete
-Last activity: 2026-04-01 — Completed 11-03-PLAN.md (parser integration)
+Phase: 12 of 13 (Signal Integration) -- COMPLETE
+Plan: 2 of 2 complete
+Status: Phase 12 complete, ready for Phase 13
+Last activity: 2026-04-02 — Completed 12-02-PLAN.md (pipeline integration + query filter)
 
-Progress: [█████████████████████] 96% (26/~27 plans)
+Progress: [██████████████████████] 97% (28/~29 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 26 (v1.0: 15, v1.1: 4, v2.0: 7)
+- Total plans completed: 28 (v1.0: 15, v1.1: 4, v2.0: 9)
 - Total execution time: see milestone records
 
 **By Phase (v1.1 — most recent):**
@@ -32,6 +32,7 @@ Progress: [█████████████████████] 96% 
 | 9. Code Analysis Foundation | 2/2 | Complete |
 | 10. Python/JS/TS Parsers | 3/3 | Complete |
 | 11. Connection Strings + Comment Analysis | 3/3 | Complete |
+| 12. Signal Integration | 2/2 | Complete |
 
 ## Accumulated Context
 
@@ -68,6 +69,13 @@ Progress: [█████████████████████] 96% 
 - Go parser extractTarget returns (target, targetType) tuple for connstring-enriched type info
 - boostKnownComponents runs as two-pass in-place mutation in RunCodeAnalysis
 - inferEnvVarTargetType duplicated per parser rather than shared (trivial function, avoids cross-package dep)
+- All code detection kinds map to EdgeDependsOn; fine-grained type info in code_signals table
+- Probabilistic OR: merged = 1-(1-a)*(1-b) for multi-source confidence merging
+- Edge.SourceType defaults to "markdown" for backward compatibility
+- Code algorithm weight = 0.85 in AlgorithmWeight map
+- Shared integrateCodeSignals() prevents export/crawl pipeline divergence
+- Source type filter semantics: code matches code+both, markdown matches markdown+both, both matches only both
+- EnrichedRelationship.SourceType always present (no omitempty) for agent reliability
 
 ### Pending Todos
 
@@ -79,6 +87,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01
-Stopped at: Completed 11-03-PLAN.md (parser integration) — Phase 11 complete
+Last session: 2026-04-02
+Stopped at: Completed 12-02-PLAN.md (pipeline integration + query filter) -- Phase 12 complete
 Resume file: None

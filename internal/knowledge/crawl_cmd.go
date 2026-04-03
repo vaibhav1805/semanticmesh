@@ -147,7 +147,7 @@ func CmdCrawl(args []string) error {
 		}
 	}
 
-	// Step 7b: Run code analysis if requested (only for directories, not ZIPs).
+	// Step 7b: Run code analysis if requested — integrate signals into graph.
 	if a.AnalyzeCode {
 		fmt.Fprintf(os.Stderr, "  Analyzing source code...\n")
 		signals, codeErr := code.RunCodeAnalysis(absInput,
@@ -159,7 +159,10 @@ func CmdCrawl(args []string) error {
 			fmt.Fprintf(os.Stderr, "  Warning: code analysis failed: %v\n", codeErr)
 		} else {
 			code.PrintCodeSignalsSummary(os.Stderr, signals)
-			fmt.Fprintf(os.Stderr, "  Code analysis: %d signals detected\n", len(signals))
+			sourceComponent := code.InferSourceComponent(absInput)
+			discovered = integrateCodeSignals(graph, discovered, signals, sourceComponent)
+			fmt.Fprintf(os.Stderr, "  Code analysis: %d signals → %d total merged edges\n",
+				len(signals), len(discovered))
 		}
 	}
 

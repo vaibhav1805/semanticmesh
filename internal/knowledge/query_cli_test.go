@@ -1100,3 +1100,286 @@ func TestQueryImpact_CyclicGraph_CyclesDetectedAbsentInJSON(t *testing.T) {
 		t.Error("cycles_detected should be absent from JSON for acyclic graph (omitempty)")
 	}
 }
+
+// --- Source type filter tests ------------------------------------------------
+
+// setupSourceTypeQueryTestGraph creates a graph with edges of mixed source_type values.
+//
+// Graph:
+//   app -> database     (markdown)
+//   app -> redis        (code)
+//   app -> queue        (both)
+//   worker -> database  (code)
+//   worker -> queue     (markdown)
+func setupSourceTypeQueryTestGraph(t *testing.T) {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	xdgDir := filepath.Join(tmpDir, "xdg")
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+
+	buildDir := filepath.Join(tmpDir, "build")
+	os.MkdirAll(buildDir, 0o755)
+
+	g := NewGraph()
+	_ = g.AddNode(&Node{ID: "app", Title: "App", Type: "document", ComponentType: ComponentTypeService})
+	_ = g.AddNode(&Node{ID: "database", Title: "Database", Type: "document", ComponentType: ComponentTypeDatabase})
+	_ = g.AddNode(&Node{ID: "redis", Title: "Redis", Type: "document", ComponentType: ComponentTypeCache})
+	_ = g.AddNode(&Node{ID: "queue", Title: "Queue", Type: "document", ComponentType: ComponentTypeUnknown})
+	_ = g.AddNode(&Node{ID: "worker", Title: "Worker", Type: "document", ComponentType: ComponentTypeService})
+
+	edges := []*Edge{
+		{ID: "app->database", Source: "app", Target: "database", Type: EdgeDependsOn, Confidence: 0.90, SourceFile: "app.md", ExtractionMethod: "explicit-link", SourceType: "markdown"},
+		{ID: "app->redis", Source: "app", Target: "redis", Type: EdgeDependsOn, Confidence: 0.75, SourceFile: "main.go", ExtractionMethod: "code-analysis", SourceType: "code"},
+		{ID: "app->queue", Source: "app", Target: "queue", Type: EdgeDependsOn, Confidence: 0.84, SourceFile: "app.md", ExtractionMethod: "explicit-link", SourceType: "both"},
+		{ID: "worker->database", Source: "worker", Target: "database", Type: EdgeDependsOn, Confidence: 0.70, SourceFile: "worker.go", ExtractionMethod: "code-analysis", SourceType: "code"},
+		{ID: "worker->queue", Source: "worker", Target: "queue", Type: EdgeDependsOn, Confidence: 0.80, SourceFile: "worker.md", ExtractionMethod: "structural", SourceType: "markdown"},
+	}
+	for _, e := range edges {
+		_ = g.AddEdge(e)
+	}
+
+	dbPath := filepath.Join(buildDir, "graph.db")
+	db, err := OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.SaveGraph(g); err != nil {
+		t.Fatalf("save graph: %v", err)
+	}
+	db.Close()
+
+	meta := ExportMetadata{
+		Version:           "1.0.0",
+		SchemaVersion:     SchemaVersion,
+		CreatedAt:         "2026-04-02T00:00:00Z",
+		ComponentCount:    5,
+		RelationshipCount: 5,
+		InputPath:         "/test",
+	}
+	metaJSON, _ := json.MarshalIndent(meta, "", "  ")
+
+	zipPath := filepath.Join(buildDir, "st-test.zip")
+	zf, _ := os.Create(zipPath)
+	zw := zip.NewWriter(zf)
+	dbData, _ := os.ReadFile(dbPath)
+	w, _ := zw.Create("graph.db")
+	w.Write(dbData)
+	w, _ = zw.Create("metadata.json")
+	w.Write(metaJSON)
+	zw.Close()
+	zf.Close()
+
+	if err := ImportZIP(zipPath, "st-test"); err != nil {
+		t.Fatalf("ImportZIP: %v", err)
+	}
+}
+
+func TestEnrichedRelationshipSourceType(t *testing.T) {
+	setupSourceTypeQueryTestGraph(t)
+
+	output := captureQueryOutput(t, func() {
+		err := CmdQuery([]string{"dependencies", "--component", "app", "--depth", "1", "--graph", "st-test"})
+		if err != nil {
+			t.Fatalf("CmdQuery deps: %v", err)
+		}
+	})
+
+	// Verify source_type appears in JSON output for every relationship.
+	var env QueryEnvelope
+	if err := json.Unmarshal([]byte(output), &env); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, output)
+	}
+
+	resultsJSON, _ := json.Marshal(env.Results)
+	var result ImpactResult
+	json.Unmarshal(resultsJSON, &result)
+
+	if len(result.Relationships) == 0 {
+		t.Fatal("expected relationships")
+	}
+
+	for _, rel := range result.Relationships {
+		if rel.SourceType == "" {
+			t.Errorf("relationship %s->%s has empty source_type", rel.From, rel.To)
+		}
+	}
+
+	// Verify specific source types.
+	stMap := make(map[string]string)
+	for _, rel := range result.Relationships {
+		stMap[rel.From+"->"+rel.To] = rel.SourceType
+	}
+
+	if st, ok := stMap["app->database"]; !ok || st != "markdown" {
+		t.Errorf("app->database: expected source_type=markdown, got %q", st)
+	}
+	if st, ok := stMap["app->redis"]; !ok || st != "code" {
+		t.Errorf("app->redis: expected source_type=code, got %q", st)
+	}
+	if st, ok := stMap["app->queue"]; !ok || st != "both" {
+		t.Errorf("app->queue: expected source_type=both, got %q", st)
+	}
+}
+
+func TestSourceTypeFilter_Code(t *testing.T) {
+	setupSourceTypeQueryTestGraph(t)
+
+	output := captureQueryOutput(t, func() {
+		err := CmdQuery([]string{"dependencies", "--component", "app", "--depth", "1", "--source-type", "code", "--graph", "st-test"})
+		if err != nil {
+			t.Fatalf("CmdQuery deps --source-type code: %v", err)
+		}
+	})
+
+	var env QueryEnvelope
+	json.Unmarshal([]byte(output), &env)
+	resultsJSON, _ := json.Marshal(env.Results)
+	var result ImpactResult
+	json.Unmarshal(resultsJSON, &result)
+
+	// --source-type code: should match "code" and "both" edges.
+	// app->redis (code) and app->queue (both), but NOT app->database (markdown).
+	names := make(map[string]bool)
+	for _, n := range result.AffectedNodes {
+		names[n.Name] = true
+	}
+
+	if !names["redis"] {
+		t.Error("expected redis in code-filtered results (source_type=code)")
+	}
+	if !names["queue"] {
+		t.Error("expected queue in code-filtered results (source_type=both)")
+	}
+	if names["database"] {
+		t.Error("database should NOT appear in code-filtered results (source_type=markdown)")
+	}
+
+	// Verify the filter appears in query params.
+	if env.Query.SourceType != "code" {
+		t.Errorf("expected query.source_type=code, got %q", env.Query.SourceType)
+	}
+}
+
+func TestSourceTypeFilter_Markdown(t *testing.T) {
+	setupSourceTypeQueryTestGraph(t)
+
+	output := captureQueryOutput(t, func() {
+		err := CmdQuery([]string{"dependencies", "--component", "app", "--depth", "1", "--source-type", "markdown", "--graph", "st-test"})
+		if err != nil {
+			t.Fatalf("CmdQuery deps --source-type markdown: %v", err)
+		}
+	})
+
+	var env QueryEnvelope
+	json.Unmarshal([]byte(output), &env)
+	resultsJSON, _ := json.Marshal(env.Results)
+	var result ImpactResult
+	json.Unmarshal(resultsJSON, &result)
+
+	// --source-type markdown: should match "markdown" and "both" edges.
+	// app->database (markdown) and app->queue (both), but NOT app->redis (code).
+	names := make(map[string]bool)
+	for _, n := range result.AffectedNodes {
+		names[n.Name] = true
+	}
+
+	if !names["database"] {
+		t.Error("expected database in markdown-filtered results (source_type=markdown)")
+	}
+	if !names["queue"] {
+		t.Error("expected queue in markdown-filtered results (source_type=both)")
+	}
+	if names["redis"] {
+		t.Error("redis should NOT appear in markdown-filtered results (source_type=code)")
+	}
+}
+
+func TestSourceTypeFilter_Both(t *testing.T) {
+	setupSourceTypeQueryTestGraph(t)
+
+	output := captureQueryOutput(t, func() {
+		err := CmdQuery([]string{"dependencies", "--component", "app", "--depth", "1", "--source-type", "both", "--graph", "st-test"})
+		if err != nil {
+			t.Fatalf("CmdQuery deps --source-type both: %v", err)
+		}
+	})
+
+	var env QueryEnvelope
+	json.Unmarshal([]byte(output), &env)
+	resultsJSON, _ := json.Marshal(env.Results)
+	var result ImpactResult
+	json.Unmarshal(resultsJSON, &result)
+
+	// --source-type both: should match ONLY "both" edges.
+	// app->queue (both) only.
+	names := make(map[string]bool)
+	for _, n := range result.AffectedNodes {
+		names[n.Name] = true
+	}
+
+	if !names["queue"] {
+		t.Error("expected queue in both-filtered results (source_type=both)")
+	}
+	if names["database"] {
+		t.Error("database should NOT appear in both-filtered results (source_type=markdown)")
+	}
+	if names["redis"] {
+		t.Error("redis should NOT appear in both-filtered results (source_type=code)")
+	}
+}
+
+func TestSourceTypeDefault(t *testing.T) {
+	// Edges without explicit source_type (empty) should default to "markdown" in output.
+	setupQueryTestGraph(t) // This graph has no SourceType set on edges.
+
+	output := captureQueryOutput(t, func() {
+		err := CmdQuery([]string{"impact", "--component", "primary-db", "--graph", "query-test"})
+		if err != nil {
+			t.Fatalf("CmdQuery impact: %v", err)
+		}
+	})
+
+	var env QueryEnvelope
+	json.Unmarshal([]byte(output), &env)
+	resultsJSON, _ := json.Marshal(env.Results)
+	var result ImpactResult
+	json.Unmarshal(resultsJSON, &result)
+
+	for _, rel := range result.Relationships {
+		if rel.SourceType != "markdown" {
+			t.Errorf("relationship %s->%s: expected default source_type=markdown, got %q", rel.From, rel.To, rel.SourceType)
+		}
+	}
+}
+
+func TestSourceTypeFilter_Impact(t *testing.T) {
+	// Verify --source-type works on impact queries (reverse traversal).
+	setupSourceTypeQueryTestGraph(t)
+
+	output := captureQueryOutput(t, func() {
+		err := CmdQuery([]string{"impact", "--component", "database", "--depth", "1", "--source-type", "code", "--graph", "st-test"})
+		if err != nil {
+			t.Fatalf("CmdQuery impact --source-type code: %v", err)
+		}
+	})
+
+	var env QueryEnvelope
+	json.Unmarshal([]byte(output), &env)
+	resultsJSON, _ := json.Marshal(env.Results)
+	var result ImpactResult
+	json.Unmarshal(resultsJSON, &result)
+
+	// database impact with code filter: worker->database (code) matches, app->database (markdown) does not.
+	names := make(map[string]bool)
+	for _, n := range result.AffectedNodes {
+		names[n.Name] = true
+	}
+
+	if !names["worker"] {
+		t.Error("expected worker in code-filtered impact results (worker->database is code)")
+	}
+	if names["app"] {
+		t.Error("app should NOT appear in code-filtered impact results (app->database is markdown)")
+	}
+}

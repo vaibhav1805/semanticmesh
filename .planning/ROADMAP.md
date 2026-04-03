@@ -39,7 +39,7 @@
 - [ ] **Phase 9: Code Analysis Foundation** - CodeSignal type, LanguageParser interface, Go parser with import/HTTP/DB/queue/cache detection
 - [x] **Phase 10: Python + JS/TS Parsers** - Python and JavaScript/TypeScript parsers validating the LanguageParser interface generalizes (completed 2026-03-31)
 - [x] **Phase 11: Connection Strings + Comment Analysis** - Cross-language connection string parsing and code comment dependency extraction (completed 2026-04-01)
-- [ ] **Phase 12: Signal Integration** - Schema v6 migration, code as 5th discovery source, confidence-weighted signal merging with provenance
+- [x] **Phase 12: Signal Integration** - Schema v6 migration, code as 5th discovery source, confidence-weighted signal merging with provenance (completed 2026-04-02)
 - [ ] **Phase 13: MCP Server** - MCP server with stdio transport wrapping query interface as 5 tools for LLM agent access
 
 ## Phase Details
@@ -97,7 +97,10 @@ Plans:
   3. When both markdown and code detect the same relationship, confidence is boosted using probabilistic OR (two independent 0.6 signals produce ~0.84, not 0.6 or 0.6 average)
   4. Schema v6 migration succeeds on existing v5 graphs without data loss (ALTER TABLE adds source_type with DEFAULT 'markdown')
   5. The code_signals provenance table records file path, line number, language, and evidence for every code-detected signal
-**Plans**: TBD
+**Plans:** 2/2 plans complete
+Plans:
+- [ ] 12-01-PLAN.md — Schema v6 migration, Edge.SourceType, signal conversion with TDD
+- [ ] 12-02-PLAN.md — Pipeline integration (export/crawl), --source-type query filter
 
 ### Phase 13: MCP Server
 **Goal**: LLM agents can query graphmd dependency graphs via MCP tool use instead of CLI invocation
@@ -128,8 +131,8 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13
 | 8. Provenance Access | v1.1 | 1 | Complete | 2026-03-29 |
 | 9. Code Analysis Foundation | v2.0 | 2 | Planning complete | - |
 | 10. Python + JS/TS Parsers | 3/3 | Complete    | 2026-03-31 | - |
-| 11. Connection Strings + Comment Analysis | 3/3 | Complete   | 2026-04-01 | - |
-| 12. Signal Integration | v2.0 | TBD | Not started | - |
+| 11. Connection Strings + Comment Analysis | 3/3 | Complete    | 2026-04-01 | - |
+| 12. Signal Integration | 2/2 | Complete   | 2026-04-02 | - |
 | 13. MCP Server | v2.0 | TBD | Not started | - |
 
 ---

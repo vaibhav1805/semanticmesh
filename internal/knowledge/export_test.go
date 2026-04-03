@@ -202,8 +202,8 @@ Serves [payment-api](../services/payment-api.md) with low-latency lookups.
 	if err != nil {
 		t.Fatalf("query schema_version: %v", err)
 	}
-	if schemaVer != "5" {
-		t.Errorf("schema_version = %q, want '5'", schemaVer)
+	if schemaVer != "6" {
+		t.Errorf("schema_version = %q, want '6'", schemaVer)
 	}
 
 	// Verify title index exists.

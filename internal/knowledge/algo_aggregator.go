@@ -40,6 +40,7 @@ var AlgorithmWeight = map[string]float64{
 	"structural":   0.6,
 	"semantic":     0.7,
 	"llm":          1.0,
+	"code":         0.85,
 }
 
 // AggregateSignals merges a flat list of DiscoverySignals by (source, target)

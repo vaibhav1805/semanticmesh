@@ -11,6 +11,10 @@ const (
 	// SignalStructural is a relationship inferred from structural patterns
 	// in heading hierarchy (e.g. "Dependencies", "Requires" sections) (0.75+).
 	SignalStructural SignalSource = "structural"
+
+	// SignalNER is a relationship detected via Named Entity Recognition
+	// and Subject-Verb-Object extraction from prose (0.5–0.7).
+	SignalNER SignalSource = "NER"
 )
 
 // DiscoveredEdge wraps an Edge with additional discovery metadata: the list of

@@ -13,6 +13,7 @@ var validExtractionMethods = map[string]bool{
 	"NER":           true,
 	"semantic":      true,
 	"LLM":           true,
+	"code-analysis": true,
 }
 
 // IsValidExtractionMethod returns true when method is a recognised extraction method.
@@ -128,6 +129,11 @@ type Edge struct {
 
 	// LastModified is the Unix timestamp of detection time or source file mtime.
 	LastModified int64
+
+	// SourceType indicates how this edge was discovered: "markdown" for edges
+	// from document analysis, "code" for edges from code signal analysis, or
+	// "both" when detected by both methods.
+	SourceType string
 }
 
 // NewEdge creates and validates an Edge.
@@ -158,6 +164,7 @@ func NewEdge(source, target string, edgeType EdgeType, confidence float64, evide
 		Confidence:        confidence,
 		Evidence:          evidence,
 		RelationshipType:  EdgeDirectDependency,
+		SourceType:        "markdown",
 	}, nil
 }
 

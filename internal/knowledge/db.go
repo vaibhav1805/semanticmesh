@@ -39,6 +39,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/graphmd/graphmd/internal/code"
 	_ "modernc.org/sqlite" // register "sqlite" driver
 )
 
@@ -48,7 +49,7 @@ var stderrWriter io.Writer = os.Stderr
 
 // SchemaVersion is incremented each time the database schema changes.
 // Migrations run automatically in Migrate() when an older database is opened.
-const SchemaVersion = 5
+const SchemaVersion = 6
 
 // Database wraps an open SQLite connection and provides domain-level
 // read/write operations for indexes and knowledge graphs.
@@ -202,12 +203,29 @@ CREATE TABLE IF NOT EXISTS graph_edges (
   detection_evidence  TEXT,
   evidence_pointer    TEXT,
   last_modified       INTEGER,
+  source_type         TEXT    NOT NULL DEFAULT 'markdown',
   FOREIGN KEY(source_id) REFERENCES graph_nodes(id) ON DELETE CASCADE,
   FOREIGN KEY(target_id) REFERENCES graph_nodes(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_edges_source ON graph_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON graph_edges(target_id);
 CREATE INDEX IF NOT EXISTS idx_edges_confidence ON graph_edges(confidence);
+
+-- code_signals: raw provenance from code analysis (import/call detection).
+CREATE TABLE IF NOT EXISTS code_signals (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_component  TEXT NOT NULL,
+  target_component  TEXT NOT NULL,
+  signal_type       TEXT NOT NULL,
+  confidence        REAL NOT NULL,
+  evidence          TEXT NOT NULL,
+  file_path         TEXT NOT NULL,
+  line_number       INTEGER NOT NULL,
+  language          TEXT NOT NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_code_signals_source ON code_signals(source_component);
+CREATE INDEX IF NOT EXISTS idx_code_signals_target ON code_signals(target_component);
 
 -- metadata: arbitrary key/value pairs (schema version, timestamps, etc.).
 CREATE TABLE IF NOT EXISTS metadata (
@@ -308,6 +326,11 @@ func (db *Database) Migrate() error {
 	if current < 5 {
 		if err := db.migrateV4ToV5(); err != nil {
 			return fmt.Errorf("knowledge.Database.Migrate: v4→v5: %w", err)
+		}
+	}
+	if current < 6 {
+		if err := db.migrateV5ToV6(); err != nil {
+			return fmt.Errorf("knowledge.Database.Migrate: v5→v6: %w", err)
 		}
 	}
 
@@ -418,6 +441,49 @@ func (db *Database) migrateV4ToV5() error {
 			return fmt.Errorf("exec %q: %w", stmt, err)
 		}
 	}
+	return nil
+}
+
+// migrateV5ToV6 adds source_type column to graph_edges and creates the
+// code_signals table for raw code analysis provenance.
+func (db *Database) migrateV5ToV6() error {
+	// Add source_type column to graph_edges.
+	alterStmt := `ALTER TABLE graph_edges ADD COLUMN source_type TEXT NOT NULL DEFAULT 'markdown'`
+	if _, err := db.conn.Exec(alterStmt); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("exec %q: %w", alterStmt, err)
+		}
+	}
+
+	// Create code_signals table for raw code analysis provenance.
+	codeSignalsSQL := `
+CREATE TABLE IF NOT EXISTS code_signals (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_component  TEXT NOT NULL,
+  target_component  TEXT NOT NULL,
+  signal_type       TEXT NOT NULL,
+  confidence        REAL NOT NULL,
+  evidence          TEXT NOT NULL,
+  file_path         TEXT NOT NULL,
+  line_number       INTEGER NOT NULL,
+  language          TEXT NOT NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+)`
+	if _, err := db.conn.Exec(codeSignalsSQL); err != nil {
+		return fmt.Errorf("create code_signals: %w", err)
+	}
+
+	// Create indexes for efficient lookups.
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_code_signals_source ON code_signals(source_component)`,
+		`CREATE INDEX IF NOT EXISTS idx_code_signals_target ON code_signals(target_component)`,
+	}
+	for _, idx := range indexes {
+		if _, err := db.conn.Exec(idx); err != nil {
+			return fmt.Errorf("exec %q: %w", idx, err)
+		}
+	}
+
 	return nil
 }
 
@@ -941,15 +1007,19 @@ func (db *Database) SaveGraph(graph *Graph) error {
 						fmt.Sprintf("  %s -> %s (missing target %q)", e.Source, e.Target, e.Target))
 					continue
 				}
+				sourceType := e.SourceType
+				if sourceType == "" {
+					sourceType = "markdown"
+				}
 				_, err := tx.Exec(
 					`INSERT OR REPLACE INTO graph_edges
 					 (id, source_id, target_id, type, confidence, evidence,
-					  source_file, extraction_method, detection_evidence, evidence_pointer, last_modified)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					  source_file, extraction_method, detection_evidence, evidence_pointer, last_modified, source_type)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					e.ID, e.Source, e.Target, string(e.Type), e.Confidence, e.Evidence,
 					nullIfEmpty(e.SourceFile), nullIfEmpty(e.ExtractionMethod),
 					nullIfEmpty(e.DetectionEvidence), nullIfEmpty(e.EvidencePointer),
-					nullIfZero(e.LastModified),
+					nullIfZero(e.LastModified), sourceType,
 				)
 				if err != nil {
 					return fmt.Errorf("insert graph_edge %q: %w", e.ID, err)
@@ -1007,7 +1077,7 @@ func (db *Database) LoadGraph(graph *Graph) error {
 	// Load edges in deterministic order (sorted by source, target, then ID).
 	eRows, err := db.conn.Query(
 		`SELECT id, source_id, target_id, type, confidence, evidence,
-		        source_file, extraction_method, detection_evidence, evidence_pointer, last_modified
+		        source_file, extraction_method, detection_evidence, evidence_pointer, last_modified, source_type
 		 FROM graph_edges ORDER BY source_id ASC, target_id ASC, id ASC`,
 	)
 	if err != nil {
@@ -1018,10 +1088,10 @@ func (db *Database) LoadGraph(graph *Graph) error {
 	for eRows.Next() {
 		var id, sourceID, targetID, edgeTypeStr string
 		var confidence float64
-		var evidence, sourceFile, extractionMethod, detectionEvidence, evidencePointer sql.NullString
+		var evidence, sourceFile, extractionMethod, detectionEvidence, evidencePointer, sourceTypeCol sql.NullString
 		var lastModified sql.NullInt64
 		if err := eRows.Scan(&id, &sourceID, &targetID, &edgeTypeStr, &confidence, &evidence,
-			&sourceFile, &extractionMethod, &detectionEvidence, &evidencePointer, &lastModified); err != nil {
+			&sourceFile, &extractionMethod, &detectionEvidence, &evidencePointer, &lastModified, &sourceTypeCol); err != nil {
 			return fmt.Errorf("knowledge.Database.LoadGraph: scan edge: %w", err)
 		}
 		e := &Edge{
@@ -1036,6 +1106,10 @@ func (db *Database) LoadGraph(graph *Graph) error {
 			DetectionEvidence: detectionEvidence.String,
 			EvidencePointer:   evidencePointer.String,
 			LastModified:      lastModified.Int64,
+			SourceType:        sourceTypeCol.String,
+		}
+		if e.SourceType == "" {
+			e.SourceType = "markdown"
 		}
 		graph.Edges[id] = e
 		graph.BySource[sourceID] = append(graph.BySource[sourceID], e)
@@ -1046,6 +1120,40 @@ func (db *Database) LoadGraph(graph *Graph) error {
 	}
 
 	return nil
+}
+
+// ─── code signal persistence ──────────────────────────────────────────────────
+
+// SaveCodeSignals bulk-inserts raw code analysis signals into the code_signals
+// provenance table. Each signal is recorded with its source component context.
+// The operation runs inside a transaction for atomicity.
+func (db *Database) SaveCodeSignals(signals []code.CodeSignal, sourceComponent string) error {
+	if len(signals) == 0 {
+		return nil
+	}
+
+	return transaction(db.conn, func(tx *sql.Tx) error {
+		stmt, err := tx.Prepare(
+			`INSERT INTO code_signals
+			 (source_component, target_component, signal_type, confidence, evidence, file_path, line_number, language)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		)
+		if err != nil {
+			return fmt.Errorf("prepare code_signals insert: %w", err)
+		}
+		defer stmt.Close()
+
+		for _, sig := range signals {
+			_, err := stmt.Exec(
+				sourceComponent, sig.TargetComponent, sig.DetectionKind,
+				sig.Confidence, sig.Evidence, sig.SourceFile, sig.LineNumber, sig.Language,
+			)
+			if err != nil {
+				return fmt.Errorf("insert code_signal for %q->%q: %w", sourceComponent, sig.TargetComponent, err)
+			}
+		}
+		return nil
+	})
 }
 
 // ─── component mention persistence ───────────────────────────────────────────
