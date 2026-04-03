@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -365,6 +366,87 @@ func (ts *TraversalState) RecordCycle(cycle []string) {
 // not descend further.
 func (ts *TraversalState) AtMaxDepth(maxDepth int) bool {
 	return ts.Depth >= maxDepth
+}
+
+// AffectedNode represents a node reached during a query traversal, serialized
+// in JSON results so agents can see what components are affected and at what
+// distance from the root.
+type AffectedNode struct {
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	Confidence       float64 `json:"confidence"`
+	RelationshipType string  `json:"relationship_type"` // "direct-dependency" or "cyclic-dependency"
+	Distance         int     `json:"distance"`          // hops from root node
+}
+
+// QueryEdge represents a single edge in a query result, including full
+// provenance so agents can assess evidence quality.
+type QueryEdge struct {
+	From             string  `json:"from"`
+	To               string  `json:"to"`
+	Confidence       float64 `json:"confidence"`
+	Type             string  `json:"type"`
+	RelationshipType string  `json:"relationship_type"`
+	Evidence         string  `json:"evidence"`
+	SourceFile       string  `json:"source_file"`
+	ExtractionMethod string  `json:"extraction_method"`
+	EvidencePointer  string  `json:"evidence_pointer"`
+	SignalsCount     int     `json:"signals_count"`
+}
+
+// QueryResult is the top-level JSON structure returned by impact and crawl
+// queries. It contains the full subgraph topology plus metadata for agent
+// consumption.
+type QueryResult struct {
+	Query         string                 `json:"query"`
+	Root          string                 `json:"root"`
+	Depth         int                    `json:"depth"`
+	TraverseMode  string                 `json:"traverse_mode"`
+	MinConfidence float64                `json:"min_confidence"`
+	MinTier       string                 `json:"min_tier"`
+	AffectedNodes []AffectedNode         `json:"affected_nodes"`
+	Edges         []QueryEdge            `json:"edges"`
+	Metadata      map[string]interface{} `json:"metadata"`
+}
+
+// String returns a pretty-printed JSON representation of the QueryResult
+// for debugging purposes.
+func (qr *QueryResult) String() string {
+	b, err := json.MarshalIndent(qr, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("QueryResult{query=%q, root=%q, error=%v}", qr.Query, qr.Root, err)
+	}
+	return string(b)
+}
+
+// Validate checks that the QueryResult has structural integrity:
+// - Root is non-empty
+// - AffectedNodes and Edges are non-empty for a valid result
+// - Every edge from/to appears in AffectedNodes
+func (qr *QueryResult) Validate() error {
+	if qr.Root == "" {
+		return fmt.Errorf("QueryResult.Validate: root must not be empty")
+	}
+	if len(qr.AffectedNodes) == 0 {
+		return fmt.Errorf("QueryResult.Validate: affected_nodes must not be empty")
+	}
+	if len(qr.Edges) == 0 {
+		return fmt.Errorf("QueryResult.Validate: edges must not be empty")
+	}
+
+	nodeSet := make(map[string]bool, len(qr.AffectedNodes))
+	for _, n := range qr.AffectedNodes {
+		nodeSet[n.Name] = true
+	}
+	for _, e := range qr.Edges {
+		if !nodeSet[e.From] {
+			return fmt.Errorf("QueryResult.Validate: edge from %q has no corresponding affected_node", e.From)
+		}
+		if !nodeSet[e.To] {
+			return fmt.Errorf("QueryResult.Validate: edge to %q has no corresponding affected_node", e.To)
+		}
+	}
+	return nil
 }
 
 // RelationshipLocation tracks where a relationship was detected in the source

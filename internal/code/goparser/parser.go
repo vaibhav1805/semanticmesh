@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/graphmd/graphmd/internal/code"
-	"github.com/graphmd/graphmd/internal/code/comments"
-	"github.com/graphmd/graphmd/internal/code/connstring"
+	"github.com/semanticmesh/semanticmesh/internal/code"
+	"github.com/semanticmesh/semanticmesh/internal/code/comments"
+	"github.com/semanticmesh/semanticmesh/internal/code/connstring"
 )
 
 // Compile-time check that GoParser implements code.LanguageParser.

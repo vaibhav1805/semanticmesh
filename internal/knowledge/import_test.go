@@ -123,7 +123,7 @@ func TestImportZIP_ValidArchive(t *testing.T) {
 	}
 
 	// Verify files exist in storage.
-	graphDir := filepath.Join(xdgDir, "graphmd", "graphs", "test-graph")
+	graphDir := filepath.Join(xdgDir, "semanticmesh", "graphs", "test-graph")
 	if _, err := os.Stat(filepath.Join(graphDir, "graph.db")); err != nil {
 		t.Errorf("graph.db not found in storage: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestImportZIP_ValidArchive(t *testing.T) {
 	}
 
 	// Verify current marker.
-	storageDir := filepath.Join(xdgDir, "graphmd", "graphs")
+	storageDir := filepath.Join(xdgDir, "semanticmesh", "graphs")
 	current, err := getCurrentGraph(storageDir)
 	if err != nil {
 		t.Fatalf("getCurrentGraph: %v", err)
@@ -156,7 +156,7 @@ func TestImportZIP_NamedGraph(t *testing.T) {
 		t.Fatalf("ImportZIP: %v", err)
 	}
 
-	graphDir := filepath.Join(xdgDir, "graphmd", "graphs", "prod-infra")
+	graphDir := filepath.Join(xdgDir, "semanticmesh", "graphs", "prod-infra")
 	if _, err := os.Stat(graphDir); err != nil {
 		t.Errorf("named graph directory not found: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestImportZIP_DefaultNameFromFilename(t *testing.T) {
 		t.Fatalf("CmdImport: %v", err)
 	}
 
-	graphDir := filepath.Join(xdgDir, "graphmd", "graphs", "my-graph")
+	graphDir := filepath.Join(xdgDir, "semanticmesh", "graphs", "my-graph")
 	if _, err := os.Stat(graphDir); err != nil {
 		t.Errorf("expected graph name 'my-graph' from filename, got error: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestImportZIP_ReimportOverwrites(t *testing.T) {
 	}
 
 	// Verify files still exist.
-	graphDir := filepath.Join(xdgDir, "graphmd", "graphs", "overwrite-test")
+	graphDir := filepath.Join(xdgDir, "semanticmesh", "graphs", "overwrite-test")
 	if _, err := os.Stat(filepath.Join(graphDir, "graph.db")); err != nil {
 		t.Errorf("graph.db missing after overwrite: %v", err)
 	}

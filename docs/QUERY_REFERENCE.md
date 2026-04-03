@@ -1,13 +1,13 @@
 # Query Reference
 
-Complete reference for `graphmd query` commands. All query commands operate on imported graphs stored in `$XDG_DATA_HOME/graphmd/graphs/`.
+Complete reference for `semanticmesh query` commands. All query commands operate on imported graphs stored in `$XDG_DATA_HOME/semanticmesh/graphs/`.
 
 ---
 
 ## Overview
 
 ```
-graphmd query <subcommand> [flags]
+semanticmesh query <subcommand> [flags]
 ```
 
 | Subcommand | Purpose |
@@ -36,7 +36,7 @@ The `--min-confidence` and `--source-type` filters compose independently: an edg
 
 ---
 
-## graphmd query impact
+## semanticmesh query impact
 
 Find downstream dependents of a component — answers "if this component fails, what breaks?"
 
@@ -45,7 +45,7 @@ Performs a **reverse traversal** (follows incoming edges) from the target compon
 ### Syntax
 
 ```bash
-graphmd query impact --component <name> [flags]
+semanticmesh query impact --component <name> [flags]
 ```
 
 ### Flags
@@ -64,7 +64,7 @@ graphmd query impact --component <name> [flags]
 ### Example
 
 ```bash
-graphmd query impact --component primary-db --depth all
+semanticmesh query impact --component primary-db --depth all
 ```
 
 ```json
@@ -117,7 +117,7 @@ graphmd query impact --component primary-db --depth all
 ### With Provenance
 
 ```bash
-graphmd query impact --component primary-db --include-provenance --max-mentions 2
+semanticmesh query impact --component primary-db --include-provenance --max-mentions 2
 ```
 
 When `--include-provenance` is set, each affected node includes detection details:
@@ -144,7 +144,7 @@ The `mention_count` field shows the total number of mentions even when `--max-me
 
 ---
 
-## graphmd query dependencies
+## semanticmesh query dependencies
 
 Find what a component depends on — answers "what does this component need to work?"
 
@@ -153,8 +153,8 @@ Performs a **forward traversal** (follows outgoing edges) from the target compon
 ### Syntax
 
 ```bash
-graphmd query dependencies --component <name> [flags]
-graphmd query deps --component <name> [flags]
+semanticmesh query dependencies --component <name> [flags]
+semanticmesh query deps --component <name> [flags]
 ```
 
 ### Flags
@@ -175,7 +175,7 @@ Identical to `impact`:
 ### Example
 
 ```bash
-graphmd query deps --component web-frontend --source-type code
+semanticmesh query deps --component web-frontend --source-type code
 ```
 
 ```json
@@ -222,14 +222,14 @@ graphmd query deps --component web-frontend --source-type code
 
 ---
 
-## graphmd query path
+## semanticmesh query path
 
 Find paths between two components, ranked by total confidence.
 
 ### Syntax
 
 ```bash
-graphmd query path --from <name> --to <name> [flags]
+semanticmesh query path --from <name> --to <name> [flags]
 ```
 
 ### Flags
@@ -247,7 +247,7 @@ graphmd query path --from <name> --to <name> [flags]
 ### Example
 
 ```bash
-graphmd query path --from web-frontend --to primary-db
+semanticmesh query path --from web-frontend --to primary-db
 ```
 
 ```json
@@ -304,14 +304,14 @@ When no path exists, the response is still a success (exit 0) with an empty path
 
 ---
 
-## graphmd query list
+## semanticmesh query list
 
 List all components in the graph with optional filtering.
 
 ### Syntax
 
 ```bash
-graphmd query list [flags]
+semanticmesh query list [flags]
 ```
 
 ### Flags
@@ -327,7 +327,7 @@ graphmd query list [flags]
 ### Example
 
 ```bash
-graphmd query list --type service --min-confidence 0.7
+semanticmesh query list --type service --min-confidence 0.7
 ```
 
 ```json
@@ -528,17 +528,17 @@ Each entry represents a back-edge that closes a cycle. Cycles are real-world pat
 
 ## Named Graphs
 
-graphmd supports multiple named graphs stored under `$XDG_DATA_HOME/graphmd/graphs/`. Each graph is an independent snapshot created by `graphmd import`.
+semanticmesh supports multiple named graphs stored under `$XDG_DATA_HOME/semanticmesh/graphs/`. Each graph is an independent snapshot created by `semanticmesh import`.
 
 - **Default graph:** When `--graph` is omitted, the most recently imported graph is used (tracked by a `current` marker file).
 - **Explicit selection:** Use `--graph <name>` to query a specific graph.
 
 ```bash
 # Import with explicit name
-graphmd import my-infra-v2.zip --name prod-2026
+semanticmesh import my-infra-v2.zip --name prod-2026
 
 # Query that specific graph
-graphmd query impact --component primary-db --graph prod-2026
+semanticmesh query impact --component primary-db --graph prod-2026
 ```
 
 ---
@@ -563,9 +563,9 @@ Suggestions are fuzzy-matched component names (up to 5) ranked by similarity. Ma
 
 ```json
 {
-  "error": "no graph imported — run 'graphmd import <file.zip>' first",
+  "error": "no graph imported — run 'semanticmesh import <file.zip>' first",
   "code": "NO_GRAPH",
-  "action": "run 'graphmd import <file.zip>' to import a graph first"
+  "action": "run 'semanticmesh import <file.zip>' to import a graph first"
 }
 ```
 

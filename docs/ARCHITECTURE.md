@@ -1,10 +1,10 @@
 # Architecture
 
-graphmd builds a dependency graph from infrastructure documentation and source code, then exposes it for querying by AI agents. This document describes the system architecture, data flow, and key abstractions.
+semanticmesh builds a dependency graph from infrastructure documentation and source code, then exposes it for querying by AI agents. This document describes the system architecture, data flow, and key abstractions.
 
 ## Design Goal
 
-AI agents need to answer questions like "if this fails, what breaks?" without being fed entire architecture documentation via prompts. graphmd pre-computes a dependency graph from markdown docs and source code, stores it in SQLite, and exposes it through a CLI and MCP server interface.
+AI agents need to answer questions like "if this fails, what breaks?" without being fed entire architecture documentation via prompts. semanticmesh pre-computes a dependency graph from markdown docs and source code, stores it in SQLite, and exposes it through a CLI and MCP server interface.
 
 ## Pipeline Overview
 
@@ -39,7 +39,7 @@ The core pipeline transforms raw documentation and source code into a queryable 
 
 ### Scan
 
-The scanner (`internal/knowledge/scanner.go`) walks a directory tree collecting markdown files. Each file becomes a `Document` with an ID (relative path), title (first H1 heading or filename), and raw content. The scanner respects `.graphmdignore` patterns for excluding files.
+The scanner (`internal/knowledge/scanner.go`) walks a directory tree collecting markdown files. Each file becomes a `Document` with an ID (relative path), title (first H1 heading or filename), and raw content. The scanner respects `.semanticmeshignore` patterns for excluding files.
 
 ### Detect (Link Extraction)
 
@@ -70,7 +70,7 @@ The code analysis subsystem (`internal/code/`) detects infrastructure dependenci
 - **Python parser** (`pyparser/`) — detects similar patterns in Python (requests, SQLAlchemy, redis-py, etc.)
 - **JS parser** (`jsparser/`) — detects patterns in JavaScript/TypeScript (fetch, pg, ioredis, etc.)
 - **Connection string parser** (`connstring/`) — extracts hostnames and types from URLs and DSNs
-- **Comment extraction** (`comments/`) — parses `@graphmd` hint comments from source
+- **Comment extraction** (`comments/`) — parses `@semanticmesh` hint comments from source
 
 Each parser produces `CodeSignal` values identifying the target component, type, detection kind, and confidence.
 
@@ -94,7 +94,7 @@ Export runs the full pipeline (scan, detect, discover, merge) and writes the res
 
 ### Import
 
-The import command (`internal/knowledge/import.go`) loads an exported ZIP archive into the persistent graph registry (`~/.local/share/graphmd/graphs/`). Named graphs allow multiple projects to coexist. Both ZIP and legacy tar.gz formats are supported.
+The import command (`internal/knowledge/import.go`) loads an exported ZIP archive into the persistent graph registry (`~/.local/share/semanticmesh/graphs/`). Named graphs allow multiple projects to coexist. Both ZIP and legacy tar.gz formats are supported.
 
 ### Query
 
@@ -110,8 +110,8 @@ All queries return structured JSON (`QueryResult`) containing affected nodes wit
 ## Package Structure
 
 ```
-graphmd/
-├── cmd/graphmd/            CLI entry point — command dispatch
+semanticmesh/
+├── cmd/semanticmesh/            CLI entry point — command dispatch
 │   └── main.go             Parses subcommands, delegates to internal packages
 │
 ├── internal/
@@ -136,7 +136,7 @@ graphmd/
 │   │   ├── scanner.go      Directory walking, document collection
 │   │   ├── bm25.go         BM25 scoring for semantic search
 │   │   ├── aliases.go      Component name aliases
-│   │   ├── graphmdignore.go  .graphmdignore pattern matching
+│   │   ├── semanticmeshignore.go  .semanticmeshignore pattern matching
 │   │   └── ...
 │   │
 │   ├── code/               Source code analysis
@@ -147,11 +147,11 @@ graphmd/
 │   │   ├── pyparser/       Python-specific parser
 │   │   ├── jsparser/       JavaScript/TypeScript-specific parser
 │   │   ├── connstring/     URL/DSN connection string parsing
-│   │   └── comments/       @graphmd hint comment extraction
+│   │   └── comments/       @semanticmesh hint comment extraction
 │   │
 │   └── mcp/                MCP server adapter
 │       ├── server.go       MCP server creation, stdio transport, signal handling
-│       └── tools.go        Tool registration (query_impact, query_dependencies, query_path, list_components, graphmd_graph_info)
+│       └── tools.go        Tool registration (query_impact, query_dependencies, query_path, list_components, semanticmesh_graph_info)
 │
 ├── docs/                   User-facing documentation
 └── .planning/              Internal development workflow (not user-facing)
@@ -252,7 +252,7 @@ Extraction method constants: `explicit-link`, `co-occurrence`, `structural`, `NE
 
 ## MCP Server
 
-The MCP (Model Context Protocol) server (`internal/mcp/`) exposes graphmd as a tool provider for LLM agents via stdio transport. It registers five tools:
+The MCP (Model Context Protocol) server (`internal/mcp/`) exposes semanticmesh as a tool provider for LLM agents via stdio transport. It registers five tools:
 
 | Tool | Description |
 |------|-------------|
@@ -260,7 +260,7 @@ The MCP (Model Context Protocol) server (`internal/mcp/`) exposes graphmd as a t
 | `query_dependencies` | Upstream dependency analysis ("what does X need?") |
 | `query_path` | Path finding between components |
 | `list_components` | Component listing with filters |
-| `graphmd_graph_info` | Graph metadata and statistics |
+| `semanticmesh_graph_info` | Graph metadata and statistics |
 
 The server uses the official `github.com/modelcontextprotocol/go-sdk/mcp` SDK and handles graceful shutdown via SIGTERM/SIGINT.
 
@@ -268,7 +268,7 @@ The server uses the official `github.com/modelcontextprotocol/go-sdk/mcp` SDK an
 
 All persistent data is stored in SQLite databases:
 
-- **Project database** — `<project>/.bmd/knowledge.db` created by `graphmd index`
-- **Graph registry** — `~/.local/share/graphmd/graphs/<name>/knowledge.db` managed by `graphmd import`
+- **Project database** — `<project>/.bmd/knowledge.db` created by `semanticmesh index`
+- **Graph registry** — `~/.local/share/semanticmesh/graphs/<name>/knowledge.db` managed by `semanticmesh import`
 
 The database uses WAL mode for concurrent read access and enforces foreign key constraints. Schema migrations run automatically when opening older databases. See [SCHEMA.md](SCHEMA.md) for the complete schema reference.

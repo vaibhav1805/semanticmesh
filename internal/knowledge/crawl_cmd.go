@@ -11,10 +11,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/graphmd/graphmd/internal/code"
-	"github.com/graphmd/graphmd/internal/code/goparser"
-	"github.com/graphmd/graphmd/internal/code/jsparser"
-	"github.com/graphmd/graphmd/internal/code/pyparser"
+	"github.com/semanticmesh/semanticmesh/internal/code"
+	"github.com/semanticmesh/semanticmesh/internal/code/goparser"
+	"github.com/semanticmesh/semanticmesh/internal/code/jsparser"
+	"github.com/semanticmesh/semanticmesh/internal/code/pyparser"
 )
 
 // ErrLegacyCrawl is a sentinel error returned by CmdCrawl when the
@@ -78,10 +78,10 @@ func CmdCrawl(args []string) error {
 		return fmt.Errorf("crawl: source directory %q does not exist or is not a directory", absInput)
 	}
 
-	// Step 1: Load .graphmdignore patterns.
-	ignoreDirs, ignoreFiles, err := LoadGraphmdIgnore(absInput)
+	// Step 1: Load .semanticmeshignore patterns.
+	ignoreDirs, ignoreFiles, err := LoadIgnoreFile(absInput)
 	if err != nil {
-		return fmt.Errorf("crawl: load .graphmdignore: %w", err)
+		return fmt.Errorf("crawl: load .semanticmeshignore: %w", err)
 	}
 
 	// Step 2: Load alias config.

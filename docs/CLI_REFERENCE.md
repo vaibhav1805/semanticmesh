@@ -1,6 +1,6 @@
 # CLI Reference
 
-Complete reference documentation for the graphmd command-line interface.
+Complete reference documentation for the semanticmesh command-line interface.
 
 ---
 
@@ -8,28 +8,28 @@ Complete reference documentation for the graphmd command-line interface.
 
 | Command | Description |
 |---------|-------------|
-| `graphmd export` | Scan, detect, and package a dependency graph as a ZIP archive |
-| `graphmd import` | Load an exported graph ZIP into persistent storage |
-| `graphmd query impact` | Query downstream impact of a component failure |
-| `graphmd query dependencies` | Query what a component depends on |
-| `graphmd query path` | Find dependency paths between two components |
-| `graphmd query list` | List components with optional filters |
-| `graphmd crawl` | Preview graph statistics before exporting |
-| `graphmd mcp` | Start MCP server for LLM agent access (stdio transport) |
-| `graphmd index` | Build component graph from markdown (legacy) |
-| `graphmd list` | List components filtered by type (legacy) |
-| `graphmd clean` | Remove all BMD artifacts from a directory |
+| `semanticmesh export` | Scan, detect, and package a dependency graph as a ZIP archive |
+| `semanticmesh import` | Load an exported graph ZIP into persistent storage |
+| `semanticmesh query impact` | Query downstream impact of a component failure |
+| `semanticmesh query dependencies` | Query what a component depends on |
+| `semanticmesh query path` | Find dependency paths between two components |
+| `semanticmesh query list` | List components with optional filters |
+| `semanticmesh crawl` | Preview graph statistics before exporting |
+| `semanticmesh mcp` | Start MCP server for LLM agent access (stdio transport) |
+| `semanticmesh index` | Build component graph from markdown (legacy) |
+| `semanticmesh list` | List components filtered by type (legacy) |
+| `semanticmesh clean` | Remove all BMD artifacts from a directory |
 
 ---
 
-## graphmd export — Package Dependency Graph
+## semanticmesh export — Package Dependency Graph
 
 Runs the full export pipeline: scan markdown, detect components, apply aliases, discover relationships, optionally analyze source code, and package everything as a ZIP archive containing `graph.db` and `metadata.json`.
 
 ### Syntax
 
 ```bash
-graphmd export [FLAGS]
+semanticmesh export [FLAGS]
 ```
 
 ### Flags
@@ -52,19 +52,19 @@ graphmd export [FLAGS]
 #### Export from documentation
 
 ```bash
-graphmd export --input ./docs --output graph.zip
+semanticmesh export --input ./docs --output graph.zip
 ```
 
 #### Export with code analysis
 
 ```bash
-graphmd export --input ./project --output graph.zip --analyze-code
+semanticmesh export --input ./project --output graph.zip --analyze-code
 ```
 
 #### Export with version tagging and S3 publish
 
 ```bash
-graphmd export --input ./docs --output graph.zip --git-version --publish s3://my-bucket/graphs/
+semanticmesh export --input ./docs --output graph.zip --git-version --publish s3://my-bucket/graphs/
 ```
 
 ### Output
@@ -76,14 +76,14 @@ The ZIP archive contains:
 
 ---
 
-## graphmd import — Load Exported Graph
+## semanticmesh import — Load Exported Graph
 
-Extracts a graph ZIP archive into XDG-compliant persistent storage (`$XDG_DATA_HOME/graphmd/` or `~/.local/share/graphmd/`). The imported graph becomes the default for subsequent queries.
+Extracts a graph ZIP archive into XDG-compliant persistent storage (`$XDG_DATA_HOME/semanticmesh/` or `~/.local/share/semanticmesh/`). The imported graph becomes the default for subsequent queries.
 
 ### Syntax
 
 ```bash
-graphmd import <file.zip> [--name NAME]
+semanticmesh import <file.zip> [--name NAME]
 ```
 
 ### Arguments
@@ -103,14 +103,14 @@ graphmd import <file.zip> [--name NAME]
 #### Import with auto-derived name
 
 ```bash
-graphmd import graph.zip
+semanticmesh import graph.zip
 # Graph name: "graph" (derived from filename)
 ```
 
 #### Import with explicit name
 
 ```bash
-graphmd import prod-infra-v2.zip --name prod-infra
+semanticmesh import prod-infra-v2.zip --name prod-infra
 ```
 
 #### Replace an existing graph
@@ -118,19 +118,19 @@ graphmd import prod-infra-v2.zip --name prod-infra
 Importing with the same name as an existing graph replaces it:
 
 ```bash
-graphmd import updated-graph.zip --name prod-infra
+semanticmesh import updated-graph.zip --name prod-infra
 # Replacing existing graph "prod-infra"
 ```
 
 ---
 
-## graphmd query — Query the Dependency Graph
+## semanticmesh query — Query the Dependency Graph
 
 All query subcommands operate on imported graphs. They share a set of global flags and return structured JSON by default.
 
 ### Global Query Flags
 
-These flags are available on all `graphmd query` subcommands:
+These flags are available on all `semanticmesh query` subcommands:
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
@@ -170,7 +170,7 @@ All query responses use a consistent envelope:
 
 ---
 
-### graphmd query impact
+### semanticmesh query impact
 
 Query downstream impact of a component failure. Answers: "if this fails, what breaks?"
 
@@ -179,7 +179,7 @@ Traverses incoming edges (reverse BFS) to find all components that depend on the
 #### Syntax
 
 ```bash
-graphmd query impact --component NAME [FLAGS]
+semanticmesh query impact --component NAME [FLAGS]
 ```
 
 #### Flags
@@ -197,19 +197,19 @@ Plus [global query flags](#global-query-flags).
 
 ```bash
 # Direct dependents only
-graphmd query impact --component primary-db
+semanticmesh query impact --component primary-db
 
 # Full transitive impact
-graphmd query impact --component primary-db --depth all
+semanticmesh query impact --component primary-db --depth all
 
 # With provenance details
-graphmd query impact --component primary-db --include-provenance --max-mentions 3
+semanticmesh query impact --component primary-db --include-provenance --max-mentions 3
 
 # Only code-detected relationships
-graphmd query impact --component redis-cache --source-type code
+semanticmesh query impact --component redis-cache --source-type code
 
 # Table output
-graphmd query impact --component primary-db --format table
+semanticmesh query impact --component primary-db --format table
 ```
 
 #### Results Schema
@@ -243,7 +243,7 @@ graphmd query impact --component primary-db --format table
 
 ---
 
-### graphmd query dependencies
+### semanticmesh query dependencies
 
 Query what a component depends on. Answers: "what does this need to work?"
 
@@ -252,31 +252,31 @@ Traverses outgoing edges (forward BFS) to find upstream dependencies.
 #### Syntax
 
 ```bash
-graphmd query dependencies --component NAME [FLAGS]
+semanticmesh query dependencies --component NAME [FLAGS]
 ```
 
-Alias: `graphmd query deps`
+Alias: `semanticmesh query deps`
 
 #### Flags
 
-Same as [query impact](#graphmd-query-impact).
+Same as [query impact](#semanticmesh-query-impact).
 
 #### Examples
 
 ```bash
 # Direct dependencies
-graphmd query dependencies --component web-frontend
+semanticmesh query dependencies --component web-frontend
 
 # All transitive dependencies
-graphmd query deps --component web-frontend --depth all
+semanticmesh query deps --component web-frontend --depth all
 
 # Only code-detected dependencies
-graphmd query dependencies --component payment-api --source-type code
+semanticmesh query dependencies --component payment-api --source-type code
 ```
 
 ---
 
-### graphmd query path
+### semanticmesh query path
 
 Find dependency paths between two components. Answers: "how does X connect to Y?"
 
@@ -285,7 +285,7 @@ Returns up to `--limit` paths with per-hop confidence scores.
 #### Syntax
 
 ```bash
-graphmd query path --from NAME --to NAME [FLAGS]
+semanticmesh query path --from NAME --to NAME [FLAGS]
 ```
 
 #### Flags
@@ -301,8 +301,8 @@ Plus [global query flags](#global-query-flags).
 #### Examples
 
 ```bash
-graphmd query path --from web-frontend --to primary-db
-graphmd query path --from web-frontend --to primary-db --min-confidence 0.7
+semanticmesh query path --from web-frontend --to primary-db
+semanticmesh query path --from web-frontend --to primary-db --min-confidence 0.7
 ```
 
 #### Results Schema
@@ -339,14 +339,14 @@ graphmd query path --from web-frontend --to primary-db --min-confidence 0.7
 
 ---
 
-### graphmd query list
+### semanticmesh query list
 
 List components with optional filters. Useful for exploring the graph before targeted queries.
 
 #### Syntax
 
 ```bash
-graphmd query list [FLAGS]
+semanticmesh query list [FLAGS]
 ```
 
 #### Flags
@@ -361,16 +361,16 @@ Plus [global query flags](#global-query-flags).
 
 ```bash
 # List all components
-graphmd query list
+semanticmesh query list
 
 # List only services
-graphmd query list --type service
+semanticmesh query list --type service
 
 # List services with high-confidence edges
-graphmd query list --type service --min-confidence 0.7
+semanticmesh query list --type service --min-confidence 0.7
 
 # List from a specific named graph
-graphmd query list --graph prod-infra --type database
+semanticmesh query list --graph prod-infra --type database
 ```
 
 #### Results Schema
@@ -391,14 +391,14 @@ graphmd query list --graph prod-infra --type database
 
 ---
 
-## graphmd crawl — Pre-Export Graph Diagnostic
+## semanticmesh crawl — Pre-Export Graph Diagnostic
 
 Runs the same pipeline as `export` (scan, ignore, alias, detect, discover) but instead of packaging a ZIP, computes and displays graph statistics. Use this to preview what an export would produce.
 
 ### Syntax
 
 ```bash
-graphmd crawl [FLAGS]
+semanticmesh crawl [FLAGS]
 ```
 
 ### Flags
@@ -414,10 +414,10 @@ graphmd crawl [FLAGS]
 
 ```bash
 # Text summary
-graphmd crawl --input ./docs
+semanticmesh crawl --input ./docs
 
 # JSON output for programmatic use
-graphmd crawl --input ./project --analyze-code --format json
+semanticmesh crawl --input ./project --analyze-code --format json
 ```
 
 ### JSON Output
@@ -447,14 +447,14 @@ graphmd crawl --input ./project --analyze-code --format json
 
 ---
 
-## graphmd mcp — MCP Server
+## semanticmesh mcp — MCP Server
 
 Starts an MCP (Model Context Protocol) server on stdio transport. LLM agents connect to this server to query the dependency graph via tool calls.
 
 ### Syntax
 
 ```bash
-graphmd mcp
+semanticmesh mcp
 ```
 
 No flags. The server runs until interrupted (SIGTERM/SIGINT).
@@ -467,7 +467,7 @@ No flags. The server runs until interrupted (SIGTERM/SIGINT).
 | `query_dependencies` | Find what a component depends on |
 | `query_path` | Find dependency paths between two components |
 | `list_components` | List all components with optional type/confidence filters |
-| `graphmd_graph_info` | Get metadata about the loaded graph |
+| `semanticmesh_graph_info` | Get metadata about the loaded graph |
 
 All tools accept a `graph` parameter to select a specific named graph.
 
@@ -478,8 +478,8 @@ Example configuration for Claude Desktop (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "graphmd": {
-      "command": "/path/to/graphmd",
+    "semanticmesh": {
+      "command": "/path/to/semanticmesh",
       "args": ["mcp"]
     }
   }
@@ -488,14 +488,14 @@ Example configuration for Claude Desktop (`claude_desktop_config.json`):
 
 ---
 
-## graphmd index — Build Component Graph (Legacy)
+## semanticmesh index — Build Component Graph (Legacy)
 
 Index markdown documents, detect component types, and persist results to a local SQLite database. This is the original indexing command; for portable graphs, prefer `export` + `import`.
 
 ### Syntax
 
 ```bash
-graphmd index [FLAGS]
+semanticmesh index [FLAGS]
 ```
 
 ### Flags
@@ -511,20 +511,20 @@ graphmd index [FLAGS]
 ### Examples
 
 ```bash
-graphmd index --dir ./docs
-graphmd index --dir ./project --analyze-code
+semanticmesh index --dir ./docs
+semanticmesh index --dir ./project --analyze-code
 ```
 
 ---
 
-## graphmd list — Query Components by Type (Legacy)
+## semanticmesh list — Query Components by Type (Legacy)
 
-List components from the indexed graph, filtered by type. For querying imported graphs, prefer `graphmd query list`.
+List components from the indexed graph, filtered by type. For querying imported graphs, prefer `semanticmesh query list`.
 
 ### Syntax
 
 ```bash
-graphmd list --type TYPE [FLAGS]
+semanticmesh list --type TYPE [FLAGS]
 ```
 
 ### Flags
@@ -538,20 +538,20 @@ graphmd list --type TYPE [FLAGS]
 ### Examples
 
 ```bash
-graphmd list --type service --dir ./docs
-graphmd list --type database --include-tags --dir ./docs
+semanticmesh list --type service --dir ./docs
+semanticmesh list --type database --include-tags --dir ./docs
 ```
 
 ---
 
-## graphmd clean — Remove Artifacts
+## semanticmesh clean — Remove Artifacts
 
 Remove the `.bmd/` directory and all indexed data from a directory.
 
 ### Syntax
 
 ```bash
-graphmd clean [--dir PATH]
+semanticmesh clean [--dir PATH]
 ```
 
 ---
@@ -560,11 +560,11 @@ graphmd clean [--dir PATH]
 
 | Command | Description |
 |---------|-------------|
-| `graphmd depends --service NAME` | Show service dependencies (direct or `--transitive`). |
-| `graphmd components --dir PATH` | List all discovered component names. |
-| `graphmd context QUERY --dir PATH` | Assemble RAG context sections for a query. |
-| `graphmd relationships --dir PATH` | List discovered relationships with confidence scores. |
-| `graphmd graph --dir PATH` | Export the full graph as JSON or DOT format. |
+| `semanticmesh depends --service NAME` | Show service dependencies (direct or `--transitive`). |
+| `semanticmesh components --dir PATH` | List all discovered component names. |
+| `semanticmesh context QUERY --dir PATH` | Assemble RAG context sections for a query. |
+| `semanticmesh relationships --dir PATH` | List discovered relationships with confidence scores. |
+| `semanticmesh graph --dir PATH` | Export the full graph as JSON or DOT format. |
 
 ---
 

@@ -19,10 +19,10 @@ type nopWriteCloser struct{ w io.Writer }
 func (n nopWriteCloser) Write(p []byte) (int, error) { return n.w.Write(p) }
 func (n nopWriteCloser) Close() error                { return nil }
 
-// NewServer creates an MCP server with all graphmd tools registered.
+// NewServer creates an MCP server with all semanticmesh tools registered.
 func NewServer() *mcpsdk.Server {
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{
-		Name:    "graphmd",
+		Name:    "semanticmesh",
 		Version: "2.0.0",
 	}, nil)
 
@@ -52,12 +52,12 @@ func Run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	fmt.Fprintf(os.Stderr, "graphmd MCP server starting on stdio...\n")
+	fmt.Fprintf(os.Stderr, "semanticmesh MCP server starting on stdio...\n")
 
 	// Wrap stdin in a pipe that stays open until context cancellation.
 	// This prevents the SDK's jsonrpc2 layer from seeing EOF (and entering
 	// shuttingDown state) before it finishes writing responses.
-	// Without this, piped input (echo '...' | graphmd mcp) races: stdin
+	// Without this, piped input (echo '...' | semanticmesh mcp) races: stdin
 	// EOF arrives before the initialize response is written, causing it
 	// to be silently dropped.
 	pr, pw := io.Pipe()

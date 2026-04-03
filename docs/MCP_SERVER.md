@@ -1,14 +1,14 @@
 # MCP Server
 
-graphmd includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes the dependency graph to AI agents. The server runs over stdio transport and provides five tools for querying infrastructure relationships.
+semanticmesh includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes the dependency graph to AI agents. The server runs over stdio transport and provides five tools for querying infrastructure relationships.
 
 ## Starting the Server
 
 ```bash
-graphmd mcp
+semanticmesh mcp
 ```
 
-This starts the MCP server on stdio (stdin/stdout). The server identifies itself as `graphmd` version `2.0.0`. Log messages are written to stderr to keep the stdio transport clean.
+This starts the MCP server on stdio (stdin/stdout). The server identifies itself as `semanticmesh` version `2.0.0`. Log messages are written to stderr to keep the stdio transport clean.
 
 The server handles `SIGTERM` and `SIGINT` for graceful shutdown.
 
@@ -18,10 +18,10 @@ Before querying, you must import at least one graph:
 
 ```bash
 # Build and export a graph
-graphmd export --input ./my-project --output graph.zip --analyze-code
+semanticmesh export --input ./my-project --output graph.zip --analyze-code
 
 # Import into persistent storage
-graphmd import graph.zip --name my-project
+semanticmesh import graph.zip --name my-project
 ```
 
 The MCP tools query against imported graphs. If no graph is available, tools return a `NO_GRAPH` error.
@@ -76,7 +76,7 @@ The MCP tools query against imported graphs. If no graph is available, tools ret
 | `source_type` | string | no | Filter by detection source: `markdown`, `code`, or `both` |
 | `graph` | string | no | Named graph to query (default: most recent import) |
 
-### graphmd_graph_info
+### semanticmesh_graph_info
 
 **Description:** Get metadata about the loaded dependency graph: name, version, component count, relationship count. Use this first to verify a graph is loaded and assess its scope.
 
@@ -131,7 +131,7 @@ All query tools return a JSON envelope with three top-level fields:
 }
 ```
 
-The `graphmd_graph_info` tool returns a simpler structure:
+The `semanticmesh_graph_info` tool returns a simpler structure:
 
 ```json
 {
@@ -185,8 +185,8 @@ Add to your Claude Desktop MCP configuration (`~/Library/Application Support/Cla
 ```json
 {
   "mcpServers": {
-    "graphmd": {
-      "command": "graphmd",
+    "semanticmesh": {
+      "command": "semanticmesh",
       "args": ["mcp"]
     }
   }
@@ -200,8 +200,8 @@ Add to your Cursor MCP settings (`.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "graphmd": {
-      "command": "graphmd",
+    "semanticmesh": {
+      "command": "semanticmesh",
       "args": ["mcp"]
     }
   }
@@ -210,24 +210,24 @@ Add to your Cursor MCP settings (`.cursor/mcp.json`):
 
 ### Generic MCP Client
 
-Any MCP client that supports stdio transport can connect to graphmd:
+Any MCP client that supports stdio transport can connect to semanticmesh:
 
 ```bash
 # The server communicates via JSON-RPC 2.0 over stdin/stdout
-graphmd mcp
+semanticmesh mcp
 ```
 
 The server responds to the standard MCP `initialize` handshake, then accepts `tools/list` and `tools/call` requests.
 
 ### Typical Agent Workflow
 
-1. **Start with graph info** -- call `graphmd_graph_info` to verify a graph is loaded and see its scope.
+1. **Start with graph info** -- call `semanticmesh_graph_info` to verify a graph is loaded and see its scope.
 2. **Explore components** -- call `list_components` to discover what's in the graph, optionally filtering by type.
 3. **Targeted queries** -- use `query_impact`, `query_dependencies`, or `query_path` to answer specific questions about component relationships.
 
 ```
 Agent: "If the payment database goes down, what services are affected?"
 
-1. graphmd_graph_info() -> 24 components, 47 relationships
+1. semanticmesh_graph_info() -> 24 components, 47 relationships
 2. query_impact(component: "payment-db", depth: 0) -> checkout-service, payment-api, billing-service
 ```

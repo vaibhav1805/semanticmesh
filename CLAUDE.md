@@ -1,10 +1,10 @@
-# Claude Code Guidance for graphmd
+# Claude Code Guidance for semanticmesh
 
 **Last updated:** 2026-03-16
 
 ## Project Context
 
-`graphmd` is a dependency graph analyzer for infrastructure documentation.
+`semanticmesh` is a dependency graph analyzer for infrastructure documentation.
 
 **Core value:** AI agents can answer "if this fails, what breaks?" by querying a pre-computed dependency graph instead of being fed entire architecture via prompts.
 
@@ -49,7 +49,7 @@
 ## File Organization
 
 ```
-graphmd/
+semanticmesh/
 ├── README.md                   # Public overview, use cases
 ├── CLAUDE.md                   # This file — project guidance
 ├── docs/
@@ -63,7 +63,7 @@ graphmd/
 │       ├── components.go       # Detection pipeline
 │       └── ...
 └── cmd/
-    └── graphmd/                # CLI entry point
+    └── semanticmesh/                # CLI entry point
 ```
 
 ---

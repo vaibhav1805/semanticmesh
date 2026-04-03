@@ -7,8 +7,8 @@ import (
 )
 
 // GraphStorageDir returns the base directory for storing imported graphs.
-// Uses $XDG_DATA_HOME/graphmd/graphs/ if set, otherwise falls back to
-// ~/.local/share/graphmd/graphs/.
+// Uses $XDG_DATA_HOME/semanticmesh/graphs/ if set, otherwise falls back to
+// ~/.local/share/semanticmesh/graphs/.
 func GraphStorageDir() (string, error) {
 	base := os.Getenv("XDG_DATA_HOME")
 	if base == "" {
@@ -18,7 +18,7 @@ func GraphStorageDir() (string, error) {
 		}
 		base = filepath.Join(home, ".local", "share")
 	}
-	return filepath.Join(base, "graphmd", "graphs"), nil
+	return filepath.Join(base, "semanticmesh", "graphs"), nil
 }
 
 // graphStoragePath returns the full path for a named graph directory.

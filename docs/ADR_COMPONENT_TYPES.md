@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-19
-**Authors:** graphmd project team
+**Authors:** semanticmesh project team
 **Supersedes:** None
 **References:** `docs/COMPONENT_TYPES.md`, `docs/CLI_REFERENCE.md`, `docs/CONFIGURATION.md`
 
@@ -20,7 +20,7 @@ Without component type information, answering these questions requires either:
 1. Feeding agents the entire architecture (expensive, slow)
 2. Having agents infer types from component names (unreliable, fragile)
 
-This defeats the core value of graphmd: allowing AI agents to efficiently query pre-computed dependency graphs for rapid incident response and architectural analysis.
+This defeats the core value of semanticmesh: allowing AI agents to efficiently query pre-computed dependency graphs for rapid incident response and architectural analysis.
 
 ---
 
@@ -159,7 +159,7 @@ This taxonomy is:
 1. **SQLite Schema (ADR-002 future):** `graph_nodes.component_type TEXT NOT NULL DEFAULT 'unknown'` persists type classification
 2. **Detection Pipeline:** Longest-match strategy for type inference; 3-tier confidence model
 3. **Seed Config Format (ADR-003 future):** YAML format for user extensibility; glob patterns for flexible matching
-4. **CLI Design:** `graphmd list --type TYPE` and `--include-tags` enable type-filtered queries
+4. **CLI Design:** `semanticmesh list --type TYPE` and `--include-tags` enable type-filtered queries
 
 ---
 
@@ -191,7 +191,7 @@ This taxonomy is:
 - [x] Detection pipeline implemented (pattern matching + keyword heuristics)
 - [x] Confidence scoring integrated (3-tier model)
 - [x] SQLite schema extended (`component_type` column)
-- [x] CLI command `graphmd list --type` implemented
+- [x] CLI command `semanticmesh list --type` implemented
 - [x] Seed config framework designed
 - [ ] Tag support (planned)
 - [ ] User documentation (this document + COMPONENT_TYPES.md, CLI_REFERENCE.md)
@@ -202,9 +202,9 @@ This taxonomy is:
 
 - **Backstage:** Spotify's service catalog (https://backstage.io/) — inspired component taxonomy
 - **Cartography:** Lyft's cloud asset inventory — inspired detection patterns
-- **graphmd COMPONENT_TYPES.md:** User-facing guide to all 12 types
-- **graphmd CLI_REFERENCE.md:** Command syntax and query examples
-- **graphmd CONFIGURATION.md:** Seed config guide for customization
+- **semanticmesh COMPONENT_TYPES.md:** User-facing guide to all 12 types
+- **semanticmesh CLI_REFERENCE.md:** Command syntax and query examples
+- **semanticmesh CONFIGURATION.md:** Seed config guide for customization
 
 ---
 
@@ -220,10 +220,10 @@ A: Seed config supports `confidence_override`. Seed-matched components always ge
 A: Currently, tags require post-processing (e.g., `jq` filtering). Future versions may add `--include-tags` filtering to queries.
 
 **Q: How do I know which components are `unknown`?**
-A: Query: `graphmd list --type unknown` or `SELECT * FROM graph_nodes WHERE component_type = 'unknown'`.
+A: Query: `semanticmesh list --type unknown` or `SELECT * FROM graph_nodes WHERE component_type = 'unknown'`.
 
 ---
 
 **Decision Date:** 2026-03-19
-**Accepted By:** graphmd project team
+**Accepted By:** semanticmesh project team
 **Last Updated:** 2026-03-19

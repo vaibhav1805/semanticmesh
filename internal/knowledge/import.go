@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// CmdImport implements the `graphmd import` CLI command.
+// CmdImport implements the `semanticmesh import` CLI command.
 // It parses flags, derives the graph name, and calls ImportZIP.
 func CmdImport(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
@@ -24,7 +24,7 @@ func CmdImport(args []string) error {
 	}
 
 	if fs.NArg() < 1 {
-		return fmt.Errorf("import: ZIP path is required\nUsage: graphmd import <file.zip> [--name <graph-name>]")
+		return fmt.Errorf("import: ZIP path is required\nUsage: semanticmesh import <file.zip> [--name <graph-name>]")
 	}
 
 	zipPath := fs.Arg(0)
@@ -54,7 +54,7 @@ func ImportZIP(zipPath, graphName string) error {
 	defer zr.Close()
 
 	// Step 2: Extract to a temporary directory.
-	tmpDir, err := os.MkdirTemp("", "graphmd-import-*")
+	tmpDir, err := os.MkdirTemp("", "semanticmesh-import-*")
 	if err != nil {
 		return fmt.Errorf("import: create temp dir: %w", err)
 	}
@@ -117,7 +117,7 @@ func ImportZIP(zipPath, graphName string) error {
 
 	// Step 5: Schema version check.
 	if meta.SchemaVersion > SchemaVersion {
-		return fmt.Errorf("import: archive schema version %d is newer than supported version %d — upgrade graphmd", meta.SchemaVersion, SchemaVersion)
+		return fmt.Errorf("import: archive schema version %d is newer than supported version %d — upgrade semanticmesh", meta.SchemaVersion, SchemaVersion)
 	}
 
 	// Step 6: Validate database integrity.
@@ -188,7 +188,7 @@ func LoadStoredGraph(graphName string) (*Graph, *ExportMetadata, error) {
 	if graphName == "" {
 		graphName, err = getCurrentGraph(storageDir)
 		if err != nil {
-			return nil, nil, fmt.Errorf("no graph imported — run 'graphmd import <file.zip>' first")
+			return nil, nil, fmt.Errorf("no graph imported — run 'semanticmesh import <file.zip>' first")
 		}
 	}
 

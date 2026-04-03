@@ -122,7 +122,7 @@ func TestHandleList_InvalidSourceType(t *testing.T) {
 // TestRegisterTools_Count verifies that exactly 5 tools are registered.
 func TestRegisterTools_Count(t *testing.T) {
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{
-		Name:    "graphmd-test",
+		Name:    "semanticmesh-test",
 		Version: "test",
 	}, nil)
 	registerTools(server)

@@ -39,7 +39,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/graphmd/graphmd/internal/code"
+	"github.com/semanticmesh/semanticmesh/internal/code"
 	_ "modernc.org/sqlite" // register "sqlite" driver
 )
 

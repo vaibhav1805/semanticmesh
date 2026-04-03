@@ -3,7 +3,7 @@ package comments
 import (
 	"testing"
 
-	"github.com/graphmd/graphmd/internal/code"
+	"github.com/semanticmesh/semanticmesh/internal/code"
 )
 
 func TestAnalyze_GoSingleLineComments(t *testing.T) {

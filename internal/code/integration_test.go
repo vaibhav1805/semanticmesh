@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/graphmd/graphmd/internal/code"
-	"github.com/graphmd/graphmd/internal/code/goparser"
-	"github.com/graphmd/graphmd/internal/code/jsparser"
-	"github.com/graphmd/graphmd/internal/code/pyparser"
+	"github.com/semanticmesh/semanticmesh/internal/code"
+	"github.com/semanticmesh/semanticmesh/internal/code/goparser"
+	"github.com/semanticmesh/semanticmesh/internal/code/jsparser"
+	"github.com/semanticmesh/semanticmesh/internal/code/pyparser"
 )
 
 func TestRunCodeAnalysis(t *testing.T) {

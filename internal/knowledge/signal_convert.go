@@ -3,7 +3,7 @@ package knowledge
 import (
 	"sort"
 
-	"github.com/graphmd/graphmd/internal/code"
+	"github.com/semanticmesh/semanticmesh/internal/code"
 )
 
 // convertCodeSignalsToDiscovered converts CodeSignal values from code analysis

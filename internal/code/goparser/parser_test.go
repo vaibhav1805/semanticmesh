@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/graphmd/graphmd/internal/code"
+	"github.com/semanticmesh/semanticmesh/internal/code"
 )
 
 // Compile-time interface check.

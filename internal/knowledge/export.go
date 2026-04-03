@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/graphmd/graphmd/internal/code"
-	"github.com/graphmd/graphmd/internal/code/goparser"
-	"github.com/graphmd/graphmd/internal/code/jsparser"
-	"github.com/graphmd/graphmd/internal/code/pyparser"
+	"github.com/semanticmesh/semanticmesh/internal/code"
+	"github.com/semanticmesh/semanticmesh/internal/code/goparser"
+	"github.com/semanticmesh/semanticmesh/internal/code/jsparser"
+	"github.com/semanticmesh/semanticmesh/internal/code/pyparser"
 )
 
 // ExportArgs holds parsed arguments for CmdExport.
@@ -66,7 +66,7 @@ type KnowledgeMetadata struct {
 
 // ParseExportArgs parses raw CLI arguments for the export command.
 //
-// Usage: graphmd export --input <path> --output <path> [--skip-discovery] [--llm-discovery] [--min-confidence 0.5]
+// Usage: semanticmesh export --input <path> --output <path> [--skip-discovery] [--llm-discovery] [--min-confidence 0.5]
 func ParseExportArgs(args []string) (*ExportArgs, error) {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -101,7 +101,7 @@ func ParseExportArgs(args []string) (*ExportArgs, error) {
 	return &a, nil
 }
 
-// CmdExport implements `graphmd export`. It runs the full export pipeline:
+// CmdExport implements `semanticmesh export`. It runs the full export pipeline:
 // scan -> detect components -> apply aliases -> discover relationships ->
 // save to SQLite -> package as ZIP with graph.db + metadata.json.
 func CmdExport(args []string) error {
@@ -138,10 +138,10 @@ func CmdExport(args []string) error {
 	fmt.Fprintf(os.Stderr, "Exporting graph from %s (v%s)...\n", absFrom, version)
 	start := time.Now()
 
-	// Step 1: Load .graphmdignore patterns.
-	ignoreDirs, ignoreFiles, err := LoadGraphmdIgnore(absFrom)
+	// Step 1: Load .semanticmeshignore patterns.
+	ignoreDirs, ignoreFiles, err := LoadIgnoreFile(absFrom)
 	if err != nil {
-		return fmt.Errorf("export: load .graphmdignore: %w", err)
+		return fmt.Errorf("export: load .semanticmeshignore: %w", err)
 	}
 
 	// Step 2: Load alias config.
@@ -248,7 +248,7 @@ func CmdExport(args []string) error {
 	}
 
 	// Step 8: Save to temporary SQLite database.
-	tmpDir, err := os.MkdirTemp("", "graphmd-export-*")
+	tmpDir, err := os.MkdirTemp("", "semanticmesh-export-*")
 	if err != nil {
 		return fmt.Errorf("export: create temp dir: %w", err)
 	}
@@ -679,7 +679,7 @@ func DownloadFromS3(s3URI string) (string, error) {
 			"Or download from: https://aws.amazon.com/cli/")
 	}
 
-	tmpFile, err := os.CreateTemp("", "graphmd-download-*")
+	tmpFile, err := os.CreateTemp("", "semanticmesh-download-*")
 	if err != nil {
 		return "", err
 	}

@@ -22,10 +22,10 @@ type AliasConfig struct {
 	once    sync.Once
 }
 
-// LoadAliasConfig reads a graphmd-aliases.yaml file from the given directory.
+// LoadAliasConfig reads a semanticmesh-aliases.yaml file from the given directory.
 // If the file does not exist, an empty (but usable) AliasConfig is returned.
 func LoadAliasConfig(dir string) (*AliasConfig, error) {
-	path := filepath.Join(dir, "graphmd-aliases.yaml")
+	path := filepath.Join(dir, "semanticmesh-aliases.yaml")
 
 	data, err := os.ReadFile(path)
 	if err != nil {

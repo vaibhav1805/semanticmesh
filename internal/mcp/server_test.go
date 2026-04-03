@@ -12,7 +12,7 @@ import (
 
 // TestInitializeResponse verifies that the MCP server responds to an initialize
 // request even when stdin EOF arrives immediately (the pipe-close race condition).
-// This simulates "echo '...' | graphmd mcp" where the pipe closes right after
+// This simulates "echo '...' | semanticmesh mcp" where the pipe closes right after
 // sending the message.
 func TestInitializeResponse(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -79,8 +79,8 @@ func TestInitializeResponse(t *testing.T) {
 	if !ok {
 		t.Fatalf("result missing 'serverInfo', got: %v", result)
 	}
-	if name, _ := serverInfo["name"].(string); name != "graphmd" {
-		t.Fatalf("expected serverInfo.name='graphmd', got '%s'", name)
+	if name, _ := serverInfo["name"].(string); name != "semanticmesh" {
+		t.Fatalf("expected serverInfo.name='semanticmesh', got '%s'", name)
 	}
 
 	// Clean shutdown: cancel context, wait for server.

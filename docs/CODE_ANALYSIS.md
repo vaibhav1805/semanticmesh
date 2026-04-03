@@ -1,6 +1,6 @@
 # Code Analysis
 
-graphmd analyzes source code to detect infrastructure dependencies -- HTTP calls, database connections, cache clients, message broker interactions, and more. These signals supplement the relationships discovered from markdown documentation, producing a richer dependency graph.
+semanticmesh analyzes source code to detect infrastructure dependencies -- HTTP calls, database connections, cache clients, message broker interactions, and more. These signals supplement the relationships discovered from markdown documentation, producing a richer dependency graph.
 
 ## Enabling Code Analysis
 
@@ -8,16 +8,16 @@ Add the `--analyze-code` flag to any of the following commands:
 
 ```bash
 # During export
-graphmd export --input ./myproject --output graph.zip --analyze-code
+semanticmesh export --input ./myproject --output graph.zip --analyze-code
 
 # During crawl
-graphmd crawl --input ./myproject --analyze-code
+semanticmesh crawl --input ./myproject --analyze-code
 
 # During index
-graphmd index --dir ./myproject --analyze-code
+semanticmesh index --dir ./myproject --analyze-code
 ```
 
-When enabled, graphmd walks the project directory, dispatches each source file to the appropriate language parser, and merges the resulting signals into the dependency graph alongside documentation-derived relationships.
+When enabled, semanticmesh walks the project directory, dispatches each source file to the appropriate language parser, and merges the resulting signals into the dependency graph alongside documentation-derived relationships.
 
 ## Supported Languages
 
@@ -143,7 +143,7 @@ const resp = await axios.get('https://auth-service.internal/verify');
 
 ## Connection String Detection
 
-When a parser finds a string argument in a detected call, graphmd attempts to parse it as a connection string to extract the target hostname. Supported formats:
+When a parser finds a string argument in a detected call, semanticmesh attempts to parse it as a connection string to extract the target hostname. Supported formats:
 
 | Format | Example | Inferred Type |
 |--------|---------|---------------|
@@ -161,7 +161,7 @@ Loopback addresses (`localhost`, `127.0.0.1`, `0.0.0.0`), documentation domains 
 
 ## Comment Analysis
 
-graphmd scans comments in all supported languages for dependency hints. Three patterns are recognized:
+semanticmesh scans comments in all supported languages for dependency hints. Three patterns are recognized:
 
 ### Explicit Dependency Mentions
 
@@ -231,7 +231,7 @@ Each detection type carries a default confidence score:
 
 ## Source Component Inference
 
-graphmd automatically infers the name of the component whose source code is being analyzed by searching for project manifests. It walks up the directory tree checking for:
+semanticmesh automatically infers the name of the component whose source code is being analyzed by searching for project manifests. It walks up the directory tree checking for:
 
 1. **go.mod** -- uses the module path (e.g., `github.com/myorg/payment-service`)
 2. **pyproject.toml** -- uses the `name` field from the `[project]` section
@@ -240,9 +240,9 @@ graphmd automatically infers the name of the component whose source code is bein
 
 If no manifest is found, the base directory name is used as fallback.
 
-## Excluding Files with .graphmdignore
+## Excluding Files with .semanticmeshignore
 
-Place a `.graphmdignore` file in the project root to control which files and directories are excluded from scanning. The format follows a simple pattern:
+Place a `.semanticmeshignore` file in the project root to control which files and directories are excluded from scanning. The format follows a simple pattern:
 
 ```
 # Comments start with #
@@ -261,7 +261,7 @@ build/
 temp_*
 ```
 
-If no `.graphmdignore` file exists, these directories are excluded by default:
+If no `.semanticmeshignore` file exists, these directories are excluded by default:
 `vendor`, `node_modules`, `.git`, `__pycache__`, `.venv`, `dist`, `build`, `target`, `.gradle`, `.next`, `out`, `.cache`, `bin`, `obj`, `.bmd`, `.planning`
 
 The code analyzer also skips test files automatically:
@@ -269,9 +269,9 @@ The code analyzer also skips test files automatically:
 - Python: `test_*.py`, `*_test.py`, `conftest.py`
 - JavaScript/TypeScript: `*.test.*`, `*.spec.*`
 
-## Component Name Normalization with graphmd-aliases.yaml
+## Component Name Normalization with semanticmesh-aliases.yaml
 
-When different parts of your codebase refer to the same component by different names, use `graphmd-aliases.yaml` to normalize them to a single canonical name:
+When different parts of your codebase refer to the same component by different names, use `semanticmesh-aliases.yaml` to normalize them to a single canonical name:
 
 ```yaml
 aliases:
@@ -295,30 +295,30 @@ Place this file in the project root. During graph construction, all alias names 
 
 ```bash
 # Export with code analysis enabled
-graphmd export --input ./payment-service --output payment.zip --analyze-code
+semanticmesh export --input ./payment-service --output payment.zip --analyze-code
 
 # Import and query
-graphmd import payment.zip --name payment
-graphmd query impact --component payment-service --graph payment
+semanticmesh import payment.zip --name payment
+semanticmesh query impact --component payment-service --graph payment
 ```
 
 ### Analyze a Python project
 
 ```bash
-graphmd export --input ./order-processor --output orders.zip --analyze-code
-graphmd import orders.zip --name orders
+semanticmesh export --input ./order-processor --output orders.zip --analyze-code
+semanticmesh import orders.zip --name orders
 
 # See what the order processor depends on
-graphmd query deps --component order-processor --graph orders
+semanticmesh query deps --component order-processor --graph orders
 ```
 
 ### Combine documentation and code signals
 
 ```bash
 # Index documentation first, then overlay code signals
-graphmd index --dir ./docs --analyze-code
+semanticmesh index --dir ./docs --analyze-code
 
 # Code signals (source_type: code) and documentation signals (source_type: markdown)
 # are combined in the same graph. Filter by source:
-graphmd query list --type database --source-type code --graph myproject
+semanticmesh query list --type database --source-type code --graph myproject
 ```

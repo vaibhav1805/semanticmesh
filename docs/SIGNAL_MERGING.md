@@ -1,6 +1,6 @@
 # Signal Merging
 
-How graphmd combines detection signals from multiple sources to produce confidence scores on relationships.
+How semanticmesh combines detection signals from multiple sources to produce confidence scores on relationships.
 
 ---
 
@@ -84,7 +84,7 @@ Merging frequently promotes relationships to higher confidence tiers:
 
 ## Integration Pipeline
 
-During `graphmd export` and `graphmd crawl`, signal merging follows this sequence:
+During `semanticmesh export` and `semanticmesh crawl`, signal merging follows this sequence:
 
 1. **Convert** code signals to graph edges, grouped by (source, target, type). For each group, the highest-confidence signal sets the edge confidence.
 
@@ -118,13 +118,13 @@ The key insight: `--source-type markdown` includes `"both"` edges because markdo
 
 ```bash
 # All relationships where code analysis contributed
-graphmd query impact --component payment-api --source-type code
+semanticmesh query impact --component payment-api --source-type code
 
 # Only relationships confirmed by both sources
-graphmd query dependencies --component auth-service --source-type both
+semanticmesh query dependencies --component auth-service --source-type both
 
 # Markdown-detected relationships (including those also found in code)
-graphmd query list --source-type markdown
+semanticmesh query list --source-type markdown
 ```
 
 ---

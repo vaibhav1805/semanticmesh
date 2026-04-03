@@ -6,11 +6,11 @@ Every component in your infrastructure carries a type classification that enable
 
 Components are the building blocks of your infrastructure documentation. Each component must be assigned a **primary type** (required) and may carry optional **tags** for additional metadata.
 
-- **Primary type:** The primary classification (service, database, cache, etc.). Used for filtering with `graphmd list --type`.
+- **Primary type:** The primary classification (service, database, cache, etc.). Used for filtering with `semanticmesh list --type`.
 - **Tags:** Optional secondary metadata (criticality, deployment model, compliance status, etc.). Searchable via `--include-tags` flag.
 - **Confidence score:** A measure of detection reliability (0.4–1.0). Higher confidence indicates stronger inference evidence.
 
-All 12 core types are built into graphmd. Users can also define custom types via seed configuration (see docs/CONFIGURATION.md).
+All 12 core types are built into semanticmesh. Users can also define custom types via seed configuration (see docs/CONFIGURATION.md).
 
 ## Core Component Types
 
@@ -284,10 +284,10 @@ Primary types capture the main category, but components may have additional meta
 ```
 
 **Using tags in queries:**
-By default, `graphmd list --type TYPE` returns only components with that primary type. To also include components tagged with the type:
+By default, `semanticmesh list --type TYPE` returns only components with that primary type. To also include components tagged with the type:
 
 ```bash
-graphmd list --type database --include-tags
+semanticmesh list --type database --include-tags
 ```
 
 This would return:
@@ -301,7 +301,7 @@ This would return:
 ### List all services
 
 ```bash
-graphmd list --type service --output json
+semanticmesh list --type service --output json
 ```
 
 **Response:** All components with `type: "service"`, ordered by confidence.
@@ -309,7 +309,7 @@ graphmd list --type service --output json
 ### Find critical databases
 
 ```bash
-graphmd list --type database --include-tags --output json | jq '.components[] | select(.tags[]? | contains("critical"))'
+semanticmesh list --type database --include-tags --output json | jq '.components[] | select(.tags[]? | contains("critical"))'
 ```
 
 **Response:** Databases or components tagged as critical.
@@ -317,7 +317,7 @@ graphmd list --type database --include-tags --output json | jq '.components[] | 
 ### Count components by type
 
 ```bash
-graphmd list --output json | jq '.components | group_by(.type) | map({type: .[0].type, count: length})'
+semanticmesh list --output json | jq '.components | group_by(.type) | map({type: .[0].type, count: length})'
 ```
 
 **Response:** Distribution of components across all types.

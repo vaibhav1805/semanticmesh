@@ -1,10 +1,10 @@
-# graphmd
+# semanticmesh
 
 A dependency graph analyzer for infrastructure documentation and source code. Query component relationships and answer critical questions like "if this fails, what breaks?" without feeding entire architecture to AI agents.
 
-## What Is graphmd?
+## What Is semanticmesh?
 
-graphmd scans your infrastructure documentation (markdown files) and source code (Go, Python, JavaScript), automatically detects components, classifies them by type, and builds a queryable dependency graph. This enables AI agents and operators to:
+semanticmesh scans your infrastructure documentation (markdown files) and source code (Go, Python, JavaScript), automatically detects components, classifies them by type, and builds a queryable dependency graph. This enables AI agents and operators to:
 
 - **Query impact:** "If this database fails, which services break?"
 - **Trace dependencies:** "What does payment-api depend on?"
@@ -18,7 +18,7 @@ Instead of feeding AI agents your entire architecture, they query the pre-comput
 
 ### Dual-Signal Detection
 
-graphmd merges signals from two sources into a single hybrid dependency graph:
+semanticmesh merges signals from two sources into a single hybrid dependency graph:
 
 - **Markdown analysis:** Extracts components and relationships from infrastructure documentation
 - **Code analysis:** Detects database connections, service URLs, message queue bindings, and cache clients from Go, Python, and JavaScript source code
@@ -37,29 +37,29 @@ Four query commands cover common dependency analysis needs:
 
 ```bash
 # What breaks if primary-db fails?
-graphmd query impact --component primary-db --depth all
+semanticmesh query impact --component primary-db --depth all
 
 # What does payment-api depend on?
-graphmd query dependencies --component payment-api
+semanticmesh query dependencies --component payment-api
 
 # How does web-frontend connect to primary-db?
-graphmd query path --from web-frontend --to primary-db
+semanticmesh query path --from web-frontend --to primary-db
 
 # List all services
-graphmd query list --type service --min-confidence 0.7
+semanticmesh query list --type service --min-confidence 0.7
 ```
 
 All queries return structured JSON with confidence tiers, detection provenance, and graph metadata. See [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) for the full command reference.
 
 ### MCP Server for LLM Agents
 
-graphmd includes a built-in MCP (Model Context Protocol) server, allowing LLM agents to query the dependency graph directly via tool calls:
+semanticmesh includes a built-in MCP (Model Context Protocol) server, allowing LLM agents to query the dependency graph directly via tool calls:
 
 ```bash
-graphmd mcp
+semanticmesh mcp
 ```
 
-The server exposes five tools over stdio transport: `query_impact`, `query_dependencies`, `query_path`, `list_components`, and `graphmd_graph_info`. Configure it in your MCP client (e.g., Claude Desktop) to give agents on-demand access to your infrastructure graph.
+The server exposes five tools over stdio transport: `query_impact`, `query_dependencies`, `query_path`, `list_components`, and `semanticmesh_graph_info`. Configure it in your MCP client (e.g., Claude Desktop) to give agents on-demand access to your infrastructure graph.
 
 ### Extensible Type System
 
@@ -85,9 +85,9 @@ See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for customization options.
 ### Installation
 
 ```bash
-git clone https://github.com/your-org/graphmd
-cd graphmd
-go build -o graphmd ./cmd/graphmd
+git clone https://github.com/your-org/semanticmesh
+cd semanticmesh
+go build -o semanticmesh ./cmd/semanticmesh
 ```
 
 ### Export a Graph
@@ -96,10 +96,10 @@ The `export` command scans documentation and (optionally) source code, builds th
 
 ```bash
 # Export from documentation only
-graphmd export --input ./docs --output graph.zip
+semanticmesh export --input ./docs --output graph.zip
 
 # Export with code analysis enabled
-graphmd export --input ./project --output graph.zip --analyze-code
+semanticmesh export --input ./project --output graph.zip --analyze-code
 ```
 
 ### Import and Query
@@ -108,16 +108,16 @@ Import the exported graph into persistent storage, then query it:
 
 ```bash
 # Import the graph
-graphmd import graph.zip --name prod-infra
+semanticmesh import graph.zip --name prod-infra
 
 # Query impact
-graphmd query impact --component primary-db --depth all
+semanticmesh query impact --component primary-db --depth all
 
 # List all databases
-graphmd query list --type database
+semanticmesh query list --type database
 
 # Find path between components
-graphmd query path --from web-frontend --to primary-db
+semanticmesh query path --from web-frontend --to primary-db
 ```
 
 ### Crawl (Pre-Export Diagnostic)
@@ -125,8 +125,8 @@ graphmd query path --from web-frontend --to primary-db
 Use `crawl` to preview graph statistics before exporting:
 
 ```bash
-graphmd crawl --input ./docs --format json
-graphmd crawl --input ./project --analyze-code --format json
+semanticmesh crawl --input ./docs --format json
+semanticmesh crawl --input ./project --analyze-code --format json
 ```
 
 ## Common Workflows
@@ -134,7 +134,7 @@ graphmd crawl --input ./project --analyze-code --format json
 ### Assess Blast Radius of a Failure
 
 ```bash
-graphmd query impact --component primary-db --depth all --format json
+semanticmesh query impact --component primary-db --depth all --format json
 ```
 
 Returns all transitively affected components with distance, confidence tiers, and relationship details.
@@ -143,16 +143,16 @@ Returns all transitively affected components with distance, confidence tiers, an
 
 ```bash
 # Only relationships detected from source code
-graphmd query dependencies --component payment-api --source-type code
+semanticmesh query dependencies --component payment-api --source-type code
 
 # Only relationships corroborated by both markdown and code
-graphmd query impact --component redis-cache --source-type both
+semanticmesh query impact --component redis-cache --source-type both
 ```
 
 ### Include Detection Provenance
 
 ```bash
-graphmd query impact --component primary-db --include-provenance --max-mentions 3
+semanticmesh query impact --component primary-db --include-provenance --max-mentions 3
 ```
 
 Each affected node includes where and how it was detected (file path, detection method, confidence).
@@ -161,24 +161,24 @@ Each affected node includes where and how it was detected (file path, detection 
 
 ```bash
 # Start MCP server (stdio transport)
-graphmd mcp
+semanticmesh mcp
 ```
 
-Agents can call `query_impact`, `query_dependencies`, `query_path`, `list_components`, and `graphmd_graph_info` as MCP tools.
+Agents can call `query_impact`, `query_dependencies`, `query_path`, `list_components`, and `semanticmesh_graph_info` as MCP tools.
 
 ## Documentation
 
 - **[docs/COMPONENT_TYPES.md](docs/COMPONENT_TYPES.md)** — Complete reference for all 12 component types, detection patterns, and confidence scoring
-- **[docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md)** — Full command reference for all graphmd commands with examples and JSON output formats
-- **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** — Guide to `.graphmdignore`, `graphmd-aliases.yaml`, seed configuration, and named graph management
+- **[docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md)** — Full command reference for all semanticmesh commands with examples and JSON output formats
+- **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** — Guide to `.semanticmeshignore`, `semanticmesh-aliases.yaml`, seed configuration, and named graph management
 - **[docs/ADR_COMPONENT_TYPES.md](docs/ADR_COMPONENT_TYPES.md)** — Architecture decision record explaining design choices
 
 ## Project Structure
 
 ```
-graphmd/
+semanticmesh/
 ├── cmd/
-│   └── graphmd/              # CLI entry point
+│   └── semanticmesh/              # CLI entry point
 ├── internal/
 │   ├── knowledge/            # Core detection, graph, query, export/import pipeline
 │   ├── code/                 # Source code analysis (Go, Python, JS parsers)
@@ -196,11 +196,11 @@ graphmd/
 
 ### 1. Scanning
 
-graphmd scans markdown documentation and extracts file paths, headings (component names), keywords (type detection signals), and relationships between components.
+semanticmesh scans markdown documentation and extracts file paths, headings (component names), keywords (type detection signals), and relationships between components.
 
 ### 2. Code Analysis (Optional)
 
-When `--analyze-code` is enabled, graphmd also parses Go, Python, and JavaScript source files to detect:
+When `--analyze-code` is enabled, semanticmesh also parses Go, Python, and JavaScript source files to detect:
 - Database connection strings (PostgreSQL, MySQL, Redis, MongoDB)
 - HTTP client URLs and service calls
 - Message queue bindings (RabbitMQ, Kafka, SQS)
@@ -208,7 +208,7 @@ When `--analyze-code` is enabled, graphmd also parses Go, Python, and JavaScript
 
 ### 3. Component Type Detection
 
-For each detected component, graphmd applies multiple detection algorithms — naming patterns, file paths, keywords, and code signals — producing `(name, type, confidence, detection_methods)`.
+For each detected component, semanticmesh applies multiple detection algorithms — naming patterns, file paths, keywords, and code signals — producing `(name, type, confidence, detection_methods)`.
 
 ### 4. Signal Merging
 
@@ -220,7 +220,7 @@ The `export` command packages the graph as a ZIP archive containing `graph.db` (
 
 ### 6. Querying
 
-After importing a graph, query it via the CLI (`graphmd query`) or MCP server (`graphmd mcp`). All output is structured JSON designed for machine consumption.
+After importing a graph, query it via the CLI (`semanticmesh query`) or MCP server (`semanticmesh mcp`). All output is structured JSON designed for machine consumption.
 
 ## Design Philosophy
 
@@ -245,11 +245,11 @@ Coverage target: >85% for core packages.
 
 ## Configuration
 
-See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for full customization options including `.graphmdignore`, `graphmd-aliases.yaml`, seed config, and named graph management.
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for full customization options including `.semanticmeshignore`, `semanticmesh-aliases.yaml`, seed config, and named graph management.
 
 ## Contributing
 
-graphmd welcomes contributions. Please see `CLAUDE.md` for development guidance.
+semanticmesh welcomes contributions. Please see `CLAUDE.md` for development guidance.
 
 ## License
 

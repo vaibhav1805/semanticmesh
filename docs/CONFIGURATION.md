@@ -1,12 +1,12 @@
 # Configuration Guide
 
-This guide covers all configuration mechanisms for graphmd: `.graphmdignore` for excluding files, `graphmd-aliases.yaml` for component name resolution, seed configuration for type customization, and named graph management.
+This guide covers all configuration mechanisms for semanticmesh: `.semanticmeshignore` for excluding files, `semanticmesh-aliases.yaml` for component name resolution, seed configuration for type customization, and named graph management.
 
 ---
 
-## .graphmdignore
+## .semanticmeshignore
 
-The `.graphmdignore` file controls which files and directories are excluded from scanning during `export` and `crawl`. Place it in the root of the directory being scanned.
+The `.semanticmeshignore` file controls which files and directories are excluded from scanning during `export` and `crawl`. Place it in the root of the directory being scanned.
 
 ### File Format
 
@@ -20,7 +20,7 @@ The `.graphmdignore` file controls which files and directories are excluded from
 ### Example
 
 ```gitignore
-# .graphmdignore
+# .semanticmeshignore
 
 # Directories
 vendor/
@@ -37,7 +37,7 @@ temp_*
 
 ### Default Patterns
 
-When no `.graphmdignore` file exists, graphmd applies these default directory exclusions:
+When no `.semanticmeshignore` file exists, semanticmesh applies these default directory exclusions:
 
 ```
 vendor
@@ -58,20 +58,20 @@ obj
 .planning
 ```
 
-When a `.graphmdignore` file is present, only its patterns are used (defaults are not merged).
+When a `.semanticmeshignore` file is present, only its patterns are used (defaults are not merged).
 
 ---
 
-## graphmd-aliases.yaml
+## semanticmesh-aliases.yaml
 
 The alias configuration file maps multiple names for the same component to a single canonical identity. This prevents duplicate nodes when documentation and code refer to the same component by different names.
 
-Place `graphmd-aliases.yaml` in the root of the directory being scanned.
+Place `semanticmesh-aliases.yaml` in the root of the directory being scanned.
 
 ### File Format
 
 ```yaml
-# graphmd-aliases.yaml
+# semanticmesh-aliases.yaml
 aliases:
   canonical-name:
     - alias-1
@@ -84,7 +84,7 @@ Each key is the canonical component name. Its values are alternate names that sh
 ### Example
 
 ```yaml
-# graphmd-aliases.yaml
+# semanticmesh-aliases.yaml
 aliases:
   postgres-primary:
     - pg-main
@@ -105,7 +105,7 @@ aliases:
 
 ### How Aliases Are Applied
 
-During `export` and `crawl`, graphmd loads the alias file and resolves node IDs and edge endpoints:
+During `export` and `crawl`, semanticmesh loads the alias file and resolves node IDs and edge endpoints:
 
 1. If a node ID matches an alias, the node is renamed to the canonical name
 2. If an edge source or target matches an alias, the endpoint is updated to the canonical name
@@ -186,7 +186,7 @@ Patterns use standard glob syntax:
 Pass the seed config file when indexing:
 
 ```bash
-graphmd index --dir ./docs --seed-config ./custom_types.yaml
+semanticmesh index --dir ./docs --seed-config ./custom_types.yaml
 ```
 
 ### Complete Example
@@ -232,28 +232,28 @@ sqlite3 .bmd/knowledge.db "
 
 ## Named Graph Management
 
-graphmd supports multiple named graphs in persistent storage. This allows you to import graphs from different environments or versions and query them independently.
+semanticmesh supports multiple named graphs in persistent storage. This allows you to import graphs from different environments or versions and query them independently.
 
 ### Storage Location
 
 Graphs are stored under XDG-compliant paths:
 
-- Linux/macOS: `$XDG_DATA_HOME/graphmd/` (default: `~/.local/share/graphmd/`)
+- Linux/macOS: `$XDG_DATA_HOME/semanticmesh/` (default: `~/.local/share/semanticmesh/`)
 - Each named graph gets its own subdirectory containing `graph.db` and `metadata.json`
 
 ### Importing Named Graphs
 
 ```bash
 # Name derived from filename
-graphmd import prod-graph.zip
-# Stored as: ~/.local/share/graphmd/prod-graph/
+semanticmesh import prod-graph.zip
+# Stored as: ~/.local/share/semanticmesh/prod-graph/
 
 # Explicit name
-graphmd import graph.zip --name prod-infra
-# Stored as: ~/.local/share/graphmd/prod-infra/
+semanticmesh import graph.zip --name prod-infra
+# Stored as: ~/.local/share/semanticmesh/prod-infra/
 
 # Import a second graph
-graphmd import graph.zip --name staging-infra
+semanticmesh import graph.zip --name staging-infra
 ```
 
 The most recently imported graph becomes the default for queries.
@@ -264,11 +264,11 @@ Use `--graph` on any query command to select a specific graph:
 
 ```bash
 # Query the default (most recent) graph
-graphmd query impact --component primary-db
+semanticmesh query impact --component primary-db
 
 # Query a specific named graph
-graphmd query impact --component primary-db --graph prod-infra
-graphmd query list --type service --graph staging-infra
+semanticmesh query impact --component primary-db --graph prod-infra
+semanticmesh query list --type service --graph staging-infra
 ```
 
 The `--graph` flag works on all query subcommands: `impact`, `dependencies`, `path`, and `list`.
@@ -278,7 +278,7 @@ The `--graph` flag works on all query subcommands: `impact`, `dependencies`, `pa
 Importing with the same name as an existing graph replaces it:
 
 ```bash
-graphmd import updated-graph.zip --name prod-infra
+semanticmesh import updated-graph.zip --name prod-infra
 # "Replacing existing graph "prod-infra""
 ```
 
@@ -288,10 +288,10 @@ graphmd import updated-graph.zip --name prod-infra
 
 ### 1. Start with Auto-Detection
 
-Run graphmd without seed config first to see what auto-detection achieves:
+Run semanticmesh without seed config first to see what auto-detection achieves:
 
 ```bash
-graphmd crawl --input ./docs --format json
+semanticmesh crawl --input ./docs --format json
 ```
 
 Then create seed config for the gaps.
@@ -307,7 +307,7 @@ aliases:
     - primary-db
 ```
 
-### 3. Keep .graphmdignore Updated
+### 3. Keep .semanticmeshignore Updated
 
 Exclude directories that generate noise (build output, dependencies, caches) to keep the graph focused on real infrastructure documentation.
 
@@ -316,7 +316,7 @@ Exclude directories that generate noise (build output, dependencies, caches) to 
 Use `--git-version` or `--version` to tag exports with meaningful versions:
 
 ```bash
-graphmd export --input ./docs --output graph.zip --git-version
+semanticmesh export --input ./docs --output graph.zip --git-version
 ```
 
 ### 5. Use Named Graphs for Environments
@@ -324,16 +324,16 @@ graphmd export --input ./docs --output graph.zip --git-version
 Import different environments as separate named graphs:
 
 ```bash
-graphmd import prod-graph.zip --name prod
-graphmd import staging-graph.zip --name staging
-graphmd query list --graph prod --type database
+semanticmesh import prod-graph.zip --name prod
+semanticmesh import staging-graph.zip --name staging
+semanticmesh query list --graph prod --type database
 ```
 
 ---
 
 ## Troubleshooting
 
-### Pattern Not Matching in .graphmdignore
+### Pattern Not Matching in .semanticmeshignore
 
 - Patterns are case-sensitive
 - Directory patterns must end with `/`
@@ -341,7 +341,7 @@ graphmd query list --graph prod --type database
 
 ### Aliases Not Being Applied
 
-- Check that `graphmd-aliases.yaml` is in the root of the scanned directory
+- Check that `semanticmesh-aliases.yaml` is in the root of the scanned directory
 - Alias matching is case-sensitive
 - If the canonical name already exists as a node, the alias node is not renamed
 
@@ -356,9 +356,9 @@ graphmd query list --graph prod --type database
 If queries return `NO_GRAPH`, import a graph first:
 
 ```bash
-graphmd export --input ./docs --output graph.zip
-graphmd import graph.zip --name my-graph
-graphmd query list
+semanticmesh export --input ./docs --output graph.zip
+semanticmesh import graph.zip --name my-graph
+semanticmesh query list
 ```
 
 ---

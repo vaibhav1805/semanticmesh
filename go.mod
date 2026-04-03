@@ -1,4 +1,4 @@
-module github.com/graphmd/graphmd
+module github.com/semanticmesh/semanticmesh
 
 go 1.25.0
 

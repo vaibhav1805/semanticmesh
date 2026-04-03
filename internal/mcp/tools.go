@@ -7,7 +7,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/graphmd/graphmd/internal/knowledge"
+	"github.com/semanticmesh/semanticmesh/internal/knowledge"
 )
 
 // --- Typed input structs for MCP tool arguments ---
@@ -49,7 +49,7 @@ type ListArgs struct {
 	Graph         string  `json:"graph,omitempty" jsonschema:"named graph to query (default: most recent import)"`
 }
 
-// GraphInfoArgs holds the input parameters for the graphmd_graph_info tool.
+// GraphInfoArgs holds the input parameters for the semanticmesh_graph_info tool.
 type GraphInfoArgs struct {
 	Graph string `json:"graph,omitempty" jsonschema:"named graph to query (default: most recent import)"`
 }
@@ -77,7 +77,7 @@ func registerTools(server *mcpsdk.Server) {
 	}, handleList)
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
-		Name:        "graphmd_graph_info",
+		Name:        "semanticmesh_graph_info",
 		Description: "Get metadata about the loaded dependency graph: name, version, component count, relationship count. Use this first to verify a graph is loaded and assess its scope.",
 	}, handleGraphInfo)
 }
@@ -144,7 +144,7 @@ func handleList(_ context.Context, _ *mcpsdk.CallToolRequest, args ListArgs) (*m
 	return marshalResult(envelope)
 }
 
-// handleGraphInfo handles the graphmd_graph_info tool call.
+// handleGraphInfo handles the semanticmesh_graph_info tool call.
 func handleGraphInfo(_ context.Context, _ *mcpsdk.CallToolRequest, args GraphInfoArgs) (*mcpsdk.CallToolResult, any, error) {
 	result, err := knowledge.GetGraphInfo(knowledge.GraphInfoParams{
 		GraphName: args.Graph,

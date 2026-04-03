@@ -248,7 +248,7 @@ Manages user accounts. Calls payment_api for billing.
     - PaymentAPI
     - payment_api
 `
-	if err := os.WriteFile(filepath.Join(tmpDir, "graphmd-aliases.yaml"), []byte(aliasYAML), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "semanticmesh-aliases.yaml"), []byte(aliasYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

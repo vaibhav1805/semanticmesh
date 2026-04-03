@@ -30,7 +30,7 @@ func TestAliasLoadYAML(t *testing.T) {
     - redis
     - cache-server
 `
-	if err := os.WriteFile(filepath.Join(dir, "graphmd-aliases.yaml"), []byte(yamlContent), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "semanticmesh-aliases.yaml"), []byte(yamlContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

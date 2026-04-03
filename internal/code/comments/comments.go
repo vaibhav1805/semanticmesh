@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/graphmd/graphmd/internal/code"
+	"github.com/semanticmesh/semanticmesh/internal/code"
 )
 
 // CommentSyntax identifies which comment syntaxes to recognize.

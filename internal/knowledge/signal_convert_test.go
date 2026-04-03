@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/graphmd/graphmd/internal/code"
+	"github.com/semanticmesh/semanticmesh/internal/code"
 )
 
 // TestConvertCodeSignalsToDiscovered_Basic verifies that 3 signals with

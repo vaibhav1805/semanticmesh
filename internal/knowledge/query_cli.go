@@ -149,7 +149,7 @@ type queryErrorJSON struct {
 
 // --- CmdQuery: top-level router ----------------------------------------------
 
-// CmdQuery is the entry point for the `graphmd query` CLI command.
+// CmdQuery is the entry point for the `semanticmesh query` CLI command.
 // It routes to subcommands: impact, dependencies, path, list.
 func CmdQuery(args []string) error {
 	if len(args) == 0 {
@@ -775,7 +775,7 @@ func writeErrorJSON(w io.Writer, message, code string, suggestions []string) {
 		Suggestions: suggestions,
 	}
 	if code == "NO_GRAPH" {
-		errObj.Action = "run 'graphmd import <file.zip>' to import a graph first"
+		errObj.Action = "run 'semanticmesh import <file.zip>' to import a graph first"
 	}
 	data, _ := json.MarshalIndent(errObj, "", "  ")
 	fmt.Fprintln(w, string(data))
@@ -902,7 +902,7 @@ func writeTable(w io.Writer, env QueryEnvelope, queryType string) {
 // --- Usage -------------------------------------------------------------------
 
 func printQueryUsage(w io.Writer) {
-	fmt.Fprintf(w, `Usage: graphmd query <subcommand> [options]
+	fmt.Fprintf(w, `Usage: semanticmesh query <subcommand> [options]
 
 Subcommands:
   impact          Query downstream impact of a component failure
@@ -920,10 +920,10 @@ The --min-confidence and --source-type filters compose independently:
 an edge must pass both filters to appear in results.
 
 Examples:
-  graphmd query impact --component payment-api
-  graphmd query impact --component primary-db --depth all
-  graphmd query dependencies --component web-frontend --source-type code
-  graphmd query path --from web-frontend --to primary-db
-  graphmd query list --type service --min-confidence 0.7
+  semanticmesh query impact --component payment-api
+  semanticmesh query impact --component primary-db --depth all
+  semanticmesh query dependencies --component web-frontend --source-type code
+  semanticmesh query path --from web-frontend --to primary-db
+  semanticmesh query list --type service --min-confidence 0.7
 `)
 }

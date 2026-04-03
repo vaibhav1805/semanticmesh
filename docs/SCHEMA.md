@@ -1,11 +1,11 @@
 # SQLite Schema Reference
 
-graphmd stores its dependency graph and search index in a SQLite database (schema version 6). This document describes every table, column, index, and the migration system.
+semanticmesh stores its dependency graph and search index in a SQLite database (schema version 6). This document describes every table, column, index, and the migration system.
 
 ## Database Location
 
-- **Project database:** `<project-root>/.bmd/knowledge.db` (created by `graphmd index`)
-- **Graph registry:** `~/.local/share/graphmd/graphs/<name>/knowledge.db` (created by `graphmd import`)
+- **Project database:** `<project-root>/.bmd/knowledge.db` (created by `semanticmesh index`)
+- **Graph registry:** `~/.local/share/semanticmesh/graphs/<name>/knowledge.db` (created by `semanticmesh import`)
 
 ## Database Configuration
 
