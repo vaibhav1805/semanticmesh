@@ -9,17 +9,17 @@ See: .planning/PROJECT.md (updated 2026-03-29)
 
 ## Current Position
 
-Phase: 12 of 13 (Signal Integration) -- COMPLETE
-Plan: 2 of 2 complete
-Status: Phase 12 complete, ready for Phase 13
-Last activity: 2026-04-02 — Completed 12-02-PLAN.md (pipeline integration + query filter)
+Phase: 13 of 13 (MCP Server)
+Plan: 3 of 3 complete
+Status: Phase 13 Complete (gap closure done)
+Last activity: 2026-04-03 — Completed 13-03-PLAN.md (MCP stdin EOF race fix)
 
-Progress: [██████████████████████] 97% (28/~29 plans)
+Progress: [███████████████████████] 100% (31/31 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 28 (v1.0: 15, v1.1: 4, v2.0: 9)
+- Total plans completed: 30 (v1.0: 15, v1.1: 4, v2.0: 11)
 - Total execution time: see milestone records
 
 **By Phase (v1.1 — most recent):**
@@ -33,6 +33,7 @@ Progress: [██████████████████████] 9
 | 10. Python/JS/TS Parsers | 3/3 | Complete |
 | 11. Connection Strings + Comment Analysis | 3/3 | Complete |
 | 12. Signal Integration | 2/2 | Complete |
+| 13. MCP Server | 3/3 | Complete |
 
 ## Accumulated Context
 
@@ -76,6 +77,15 @@ Progress: [██████████████████████] 9
 - Shared integrateCodeSignals() prevents export/crawl pipeline divergence
 - Source type filter semantics: code matches code+both, markdown matches markdown+both, both matches only both
 - EnrichedRelationship.SourceType always present (no omitempty) for agent reliability
+- QueryError type with Code field for MCP layer to distinguish user errors from infrastructure errors
+- MaxMentions=0 means unlimited (passed through directly, not defaulted in Execute layer)
+- CLI parseDepth stays in CLI layer since it handles string-to-int conversion for 'all' keyword
+- MCP server uses ToolHandlerFor generic API for auto JSON Schema from Go structs
+- QueryError -> explicit CallToolResult with IsError=true and structured JSON; infrastructure errors passed as Go errors
+- Stdout guard: redirect os.Stdout to os.Stderr during setup, restore before server.Run
+- MCP SDK v1.4.1 jsonschema tags use plain description text, not key=value format
+- io.Pipe wrapper blocks on ctx.Done after stdin EOF, keeping transport open until graceful shutdown
+- nopWriteCloser avoids closing stdout when IOTransport calls Close
 
 ### Pending Todos
 
@@ -87,6 +97,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02
-Stopped at: Completed 12-02-PLAN.md (pipeline integration + query filter) -- Phase 12 complete
+Last session: 2026-04-03
+Stopped at: Completed 13-03-PLAN.md (MCP stdin EOF race fix) -- gap closure plan complete
 Resume file: None

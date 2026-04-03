@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
-	"time"
 )
 
 // --- Response envelope types -------------------------------------------------
@@ -194,73 +194,25 @@ func cmdQueryImpact(args []string) error {
 		return fmt.Errorf("query impact: %w", err)
 	}
 
-	if *component == "" {
-		return writeErrorJSONStdout("--component is required", "MISSING_ARG", nil)
-	}
-
-	if msg := validateSourceType(*sourceType); msg != "" {
-		return writeErrorJSONStdout(msg, "INVALID_ARG", nil)
-	}
-
 	depth, err := parseDepth(*depthStr)
 	if err != nil {
 		return writeErrorJSONStdout(err.Error(), "INVALID_ARG", nil)
 	}
 
-	g, meta, err := LoadStoredGraph(*graphName)
+	envelope, err := ExecuteImpactQuery(QueryImpactParams{
+		Component:         *component,
+		Depth:             depth,
+		MinConfidence:     *minConf,
+		SourceType:        *sourceType,
+		GraphName:         *graphName,
+		IncludeProvenance: *includeProvenance,
+		MaxMentions:       *maxMentions,
+	})
 	if err != nil {
-		return handleLoadError(err)
+		return handleQueryError(err)
 	}
 
-	start := time.Now()
-
-	// Check component exists.
-	if _, ok := g.Nodes[*component]; !ok {
-		suggestions := suggestComponents(g, *component)
-		return writeErrorJSONStdout(
-			fmt.Sprintf("component %q not found", *component),
-			"NOT_FOUND", suggestions)
-	}
-
-	// Impact = reverse traversal: follow ByTarget to find things that depend on this component.
-	affectedNodes, relationships, cycles := executeImpactReverse(g, *component, depth, minConf, *sourceType)
-
-	// Decorate with provenance if requested.
-	if *includeProvenance {
-		mentions := loadMentionsForGraph(*graphName)
-		if mentions != nil {
-			decorateWithMentions(affectedNodes, mentions, *maxMentions)
-		}
-	}
-
-	elapsed := time.Since(start).Milliseconds()
-
-	result := ImpactResult{
-		AffectedNodes: affectedNodes,
-		Relationships: relationships,
-	}
-
-	var confParam float64
-	if *minConf > 0 {
-		confParam = *minConf
-	}
-
-	md := buildMetadata(g, meta, *graphName, elapsed)
-	md.CyclesDetected = cycles
-
-	envelope := QueryEnvelope{
-		Query: QueryEnvelopeParams{
-			Type:          "impact",
-			Component:     *component,
-			Depth:         depth,
-			MinConfidence: confParam,
-			SourceType:    *sourceType,
-		},
-		Results:  result,
-		Metadata: md,
-	}
-
-	return outputEnvelope(envelope, *format, "impact")
+	return outputEnvelope(*envelope, *format, "impact")
 }
 
 // --- Dependencies subcommand -------------------------------------------------
@@ -282,73 +234,25 @@ func cmdQueryDependencies(args []string) error {
 		return fmt.Errorf("query dependencies: %w", err)
 	}
 
-	if *component == "" {
-		return writeErrorJSONStdout("--component is required", "MISSING_ARG", nil)
-	}
-
-	if msg := validateSourceType(*sourceType); msg != "" {
-		return writeErrorJSONStdout(msg, "INVALID_ARG", nil)
-	}
-
 	depth, err := parseDepth(*depthStr)
 	if err != nil {
 		return writeErrorJSONStdout(err.Error(), "INVALID_ARG", nil)
 	}
 
-	g, meta, err := LoadStoredGraph(*graphName)
+	envelope, err := ExecuteDependenciesQuery(QueryDependenciesParams{
+		Component:         *component,
+		Depth:             depth,
+		MinConfidence:     *minConf,
+		SourceType:        *sourceType,
+		GraphName:         *graphName,
+		IncludeProvenance: *includeProvenance,
+		MaxMentions:       *maxMentions,
+	})
 	if err != nil {
-		return handleLoadError(err)
+		return handleQueryError(err)
 	}
 
-	start := time.Now()
-
-	// Check component exists.
-	if _, ok := g.Nodes[*component]; !ok {
-		suggestions := suggestComponents(g, *component)
-		return writeErrorJSONStdout(
-			fmt.Sprintf("component %q not found", *component),
-			"NOT_FOUND", suggestions)
-	}
-
-	// Dependencies = forward traversal: follow BySource to find what this component depends on.
-	affectedNodes, relationships, cycles := executeForwardTraversal(g, *component, depth, minConf, *sourceType)
-
-	// Decorate with provenance if requested.
-	if *includeProvenance {
-		mentions := loadMentionsForGraph(*graphName)
-		if mentions != nil {
-			decorateWithMentions(affectedNodes, mentions, *maxMentions)
-		}
-	}
-
-	elapsed := time.Since(start).Milliseconds()
-
-	result := ImpactResult{
-		AffectedNodes: affectedNodes,
-		Relationships: relationships,
-	}
-
-	var confParam float64
-	if *minConf > 0 {
-		confParam = *minConf
-	}
-
-	md := buildMetadata(g, meta, *graphName, elapsed)
-	md.CyclesDetected = cycles
-
-	envelope := QueryEnvelope{
-		Query: QueryEnvelopeParams{
-			Type:          "dependencies",
-			Component:     *component,
-			Depth:         depth,
-			MinConfidence: confParam,
-			SourceType:    *sourceType,
-		},
-		Results:  result,
-		Metadata: md,
-	}
-
-	return outputEnvelope(envelope, *format, "dependencies")
+	return outputEnvelope(*envelope, *format, "dependencies")
 }
 
 // --- Path subcommand ---------------------------------------------------------
@@ -369,93 +273,20 @@ func cmdQueryPath(args []string) error {
 		return fmt.Errorf("query path: %w", err)
 	}
 
-	if *from == "" || *to == "" {
-		return writeErrorJSONStdout("--from and --to are required", "MISSING_ARG", nil)
-	}
-
-	if msg := validateSourceType(*sourceType); msg != "" {
-		return writeErrorJSONStdout(msg, "INVALID_ARG", nil)
-	}
-
-	g, meta, err := LoadStoredGraph(*graphName)
-	if err != nil {
-		return handleLoadError(err)
-	}
-
-	start := time.Now()
-
-	// Validate both components exist.
-	if _, ok := g.Nodes[*from]; !ok {
-		suggestions := suggestComponents(g, *from)
-		return writeErrorJSONStdout(
-			fmt.Sprintf("component %q not found", *from),
-			"NOT_FOUND", suggestions)
-	}
-	if _, ok := g.Nodes[*to]; !ok {
-		suggestions := suggestComponents(g, *to)
-		return writeErrorJSONStdout(
-			fmt.Sprintf("component %q not found", *to),
-			"NOT_FOUND", suggestions)
-	}
-
-	// Find paths.
-	rawPaths := g.FindPaths(*from, *to, 20)
-
-	var pathInfos []PathInfo
-	for _, nodePath := range rawPaths {
-		hops, totalConf, valid := buildHopsWithFilter(g, nodePath, *minConf, *sourceType)
-		if !valid {
-			continue // some hop below min-confidence or filtered by source type
-		}
-		pathInfos = append(pathInfos, PathInfo{
-			Nodes:           nodePath,
-			Hops:            hops,
-			TotalConfidence: totalConf,
-		})
-	}
-
-	// Sort by total confidence descending.
-	sort.Slice(pathInfos, func(i, j int) bool {
-		return pathInfos[i].TotalConfidence > pathInfos[j].TotalConfidence
+	envelope, err := ExecutePathQuery(QueryPathParams{
+		From:          *from,
+		To:            *to,
+		Limit:         *limit,
+		MinConfidence: *minConf,
+		SourceType:    *sourceType,
+		GraphName:     *graphName,
 	})
-
-	// Apply limit.
-	if len(pathInfos) > *limit {
-		pathInfos = pathInfos[:*limit]
-	}
-
-	result := PathResult{
-		Paths: pathInfos,
-		Count: len(pathInfos),
-	}
-	if result.Paths == nil {
-		result.Paths = []PathInfo{}
-	}
-	if len(pathInfos) == 0 {
-		result.Reason = fmt.Sprintf("no path found between %s and %s", *from, *to)
-	}
-
-	elapsed := time.Since(start).Milliseconds()
-
-	var confParam float64
-	if *minConf > 0 {
-		confParam = *minConf
-	}
-
-	envelope := QueryEnvelope{
-		Query: QueryEnvelopeParams{
-			Type:          "path",
-			From:          *from,
-			To:            *to,
-			MinConfidence: confParam,
-			SourceType:    *sourceType,
-		},
-		Results:  result,
-		Metadata: buildMetadata(g, meta, *graphName, elapsed),
+	if err != nil {
+		return handleQueryError(err)
 	}
 
 	// No path found is success (exit 0).
-	return outputEnvelopeSuccess(envelope, *format, "path")
+	return outputEnvelopeSuccess(*envelope, *format, "path")
 }
 
 // --- List subcommand ---------------------------------------------------------
@@ -474,115 +305,17 @@ func cmdQueryList(args []string) error {
 		return fmt.Errorf("query list: %w", err)
 	}
 
-	if msg := validateSourceType(*sourceType); msg != "" {
-		return writeErrorJSONStdout(msg, "INVALID_ARG", nil)
-	}
-
-	g, meta, err := LoadStoredGraph(*graphName)
-	if err != nil {
-		return handleLoadError(err)
-	}
-
-	start := time.Now()
-
-	var components []ListComponent
-	for id, node := range g.Nodes {
-		// Type filter.
-		if *typeName != "" && string(node.ComponentType) != *typeName {
-			continue
-		}
-
-		incoming := len(g.ByTarget[id])
-		outgoing := len(g.BySource[id])
-
-		// Min-confidence filter: only include nodes where at least one connected edge meets threshold.
-		if *minConf > 0 {
-			hasQualifyingEdge := false
-			for _, e := range g.BySource[id] {
-				if e.Confidence >= *minConf {
-					hasQualifyingEdge = true
-					break
-				}
-			}
-			if !hasQualifyingEdge {
-				for _, e := range g.ByTarget[id] {
-					if e.Confidence >= *minConf {
-						hasQualifyingEdge = true
-						break
-					}
-				}
-			}
-			if !hasQualifyingEdge {
-				continue
-			}
-		}
-
-		// Source-type filter: only include nodes where at least one connected edge matches.
-		if *sourceType != "" {
-			hasMatchingEdge := false
-			for _, e := range g.BySource[id] {
-				if matchesSourceTypeFilter(e, *sourceType) {
-					hasMatchingEdge = true
-					break
-				}
-			}
-			if !hasMatchingEdge {
-				for _, e := range g.ByTarget[id] {
-					if matchesSourceTypeFilter(e, *sourceType) {
-						hasMatchingEdge = true
-						break
-					}
-				}
-			}
-			if !hasMatchingEdge {
-				continue
-			}
-		}
-
-		nodeType := string(node.ComponentType)
-		if nodeType == "" {
-			nodeType = "unknown"
-		}
-
-		components = append(components, ListComponent{
-			Name:          id,
-			Type:          nodeType,
-			IncomingEdges: incoming,
-			OutgoingEdges: outgoing,
-		})
-	}
-
-	// Sort by name for deterministic output.
-	sort.Slice(components, func(i, j int) bool {
-		return components[i].Name < components[j].Name
+	envelope, err := ExecuteListQuery(QueryListParams{
+		TypeName:      *typeName,
+		MinConfidence: *minConf,
+		SourceType:    *sourceType,
+		GraphName:     *graphName,
 	})
-
-	result := ListResult{
-		Components: components,
-		Count:      len(components),
-	}
-	if result.Components == nil {
-		result.Components = []ListComponent{}
+	if err != nil {
+		return handleQueryError(err)
 	}
 
-	elapsed := time.Since(start).Milliseconds()
-
-	var confParam float64
-	if *minConf > 0 {
-		confParam = *minConf
-	}
-
-	envelope := QueryEnvelope{
-		Query: QueryEnvelopeParams{
-			Type:          "list",
-			MinConfidence: confParam,
-			SourceType:    *sourceType,
-		},
-		Results:  result,
-		Metadata: buildMetadata(g, meta, *graphName, elapsed),
-	}
-
-	return outputEnvelopeSuccess(envelope, *format, "list")
+	return outputEnvelopeSuccess(*envelope, *format, "list")
 }
 
 // --- Mention decoration ------------------------------------------------------
@@ -1051,6 +784,17 @@ func writeErrorJSON(w io.Writer, message, code string, suggestions []string) {
 func writeErrorJSONStdout(message, code string, suggestions []string) error {
 	writeErrorJSON(os.Stdout, message, code, suggestions)
 	return fmt.Errorf("%s", message)
+}
+
+// handleQueryError converts errors from Execute* functions into CLI-appropriate
+// output. QueryError instances produce structured JSON on stdout (preserving
+// existing CLI behavior). Load errors are handled specially. Other errors pass through.
+func handleQueryError(err error) error {
+	var qe *QueryError
+	if errors.As(err, &qe) {
+		return writeErrorJSONStdout(qe.Message, qe.Code, qe.Suggestions)
+	}
+	return handleLoadError(err)
 }
 
 func handleLoadError(err error) error {

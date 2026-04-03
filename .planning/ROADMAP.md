@@ -40,7 +40,7 @@
 - [x] **Phase 10: Python + JS/TS Parsers** - Python and JavaScript/TypeScript parsers validating the LanguageParser interface generalizes (completed 2026-03-31)
 - [x] **Phase 11: Connection Strings + Comment Analysis** - Cross-language connection string parsing and code comment dependency extraction (completed 2026-04-01)
 - [x] **Phase 12: Signal Integration** - Schema v6 migration, code as 5th discovery source, confidence-weighted signal merging with provenance (completed 2026-04-02)
-- [ ] **Phase 13: MCP Server** - MCP server with stdio transport wrapping query interface as 5 tools for LLM agent access
+- [x] **Phase 13: MCP Server** - MCP server with stdio transport wrapping query interface as 5 tools for LLM agent access (completed 2026-04-03)
 
 ## Phase Details
 
@@ -112,7 +112,11 @@ Plans:
   3. MCP tool responses contain the same data as equivalent CLI queries (JSON envelope with query, results, metadata)
   4. No stdout pollution — all logging goes to stderr, only MCP protocol messages on stdout
   5. Server shuts down gracefully on SIGTERM without corrupting state
-**Plans**: TBD
+**Plans:** 3/3 plans complete
+Plans:
+- [x] 13-01-PLAN.md — Extract query execution into exported functions for MCP consumption
+- [x] 13-02-PLAN.md — MCP server package with 5 tools + `graphmd mcp` CLI command
+- [ ] 13-03-PLAN.md — Fix stdin EOF race: replace StdioTransport with IOTransport pipe wrapper
 
 ## Progress
 
@@ -132,8 +136,8 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13
 | 9. Code Analysis Foundation | v2.0 | 2 | Planning complete | - |
 | 10. Python + JS/TS Parsers | 3/3 | Complete    | 2026-03-31 | - |
 | 11. Connection Strings + Comment Analysis | 3/3 | Complete    | 2026-04-01 | - |
-| 12. Signal Integration | 2/2 | Complete   | 2026-04-02 | - |
-| 13. MCP Server | v2.0 | TBD | Not started | - |
+| 12. Signal Integration | 2/2 | Complete    | 2026-04-02 | - |
+| 13. MCP Server | 3/3 | Complete   | 2026-04-03 | - |
 
 ---
 *Created: 2026-03-16*

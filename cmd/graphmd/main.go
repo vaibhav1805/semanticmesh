@@ -14,6 +14,7 @@ import (
 	"github.com/graphmd/graphmd/internal/code/jsparser"
 	"github.com/graphmd/graphmd/internal/code/pyparser"
 	"github.com/graphmd/graphmd/internal/knowledge"
+	mcpserver "github.com/graphmd/graphmd/internal/mcp"
 )
 
 func main() {
@@ -45,6 +46,8 @@ func main() {
 		cmdExport()
 	case "import":
 		cmdImport()
+	case "mcp":
+		cmdMCP()
 	case "query":
 		cmdQueryMain()
 	case "clean":
@@ -707,6 +710,13 @@ func cmdQueryMain() {
 	}
 }
 
+func cmdMCP() {
+	if err := mcpserver.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "MCP server error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func cmdClean() {
 	fs := flag.NewFlagSet("clean", flag.ExitOnError)
 	dir := fs.String("dir", ".", "Directory to clean")
@@ -750,6 +760,7 @@ Commands:
   graph           Export the full dependency graph
   export          Package knowledge as a ZIP archive
   import          Load an exported graph ZIP into persistent storage
+  mcp             Start MCP server for LLM agent access (stdio transport)
   query impact    Query downstream impact of a component failure
   query deps      Query what a component depends on
   query path      Find paths between two components
@@ -774,6 +785,7 @@ Examples:
   graphmd query dependencies --component web-frontend --depth all
   graphmd query path --from web-frontend --to primary-db
   graphmd query list --type service --min-confidence 0.7
+  graphmd mcp
 
 `)
 

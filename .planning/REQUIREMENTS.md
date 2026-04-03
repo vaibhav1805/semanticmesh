@@ -22,7 +22,7 @@ Code analysis integration and MCP server for LLM agent access.
 
 ### MCP Server
 
-- [ ] **MCP-01**: MCP server with stdio transport wrapping query interface — 5 tools: impact, dependencies, path, list, graph_info
+- [x] **MCP-01**: MCP server with stdio transport wrapping query interface — 5 tools: impact, dependencies, path, list, graph_info
 
 ## v2.1 Requirements
 
