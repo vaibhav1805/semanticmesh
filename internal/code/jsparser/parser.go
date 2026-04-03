@@ -3,9 +3,9 @@ package jsparser
 import (
 	"strings"
 
-	"github.com/semanticmesh/semanticmesh/internal/code"
-	"github.com/semanticmesh/semanticmesh/internal/code/comments"
-	"github.com/semanticmesh/semanticmesh/internal/code/connstring"
+	"github.com/vaibhav1805/semanticmesh/internal/code"
+	"github.com/vaibhav1805/semanticmesh/internal/code/comments"
+	"github.com/vaibhav1805/semanticmesh/internal/code/connstring"
 )
 
 // Compile-time check that JSParser implements code.LanguageParser.

@@ -3,7 +3,7 @@ package pyparser
 import (
 	"testing"
 
-	"github.com/semanticmesh/semanticmesh/internal/code"
+	"github.com/vaibhav1805/semanticmesh/internal/code"
 )
 
 // assertSignal is a helper that finds a signal by detection kind and target, then validates fields.

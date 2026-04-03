@@ -39,7 +39,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/semanticmesh/semanticmesh/internal/code"
+	"github.com/vaibhav1805/semanticmesh/internal/code"
 	_ "modernc.org/sqlite" // register "sqlite" driver
 )
 

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/semanticmesh/semanticmesh/internal/code"
+	"github.com/vaibhav1805/semanticmesh/internal/code"
 )
 
 // Compile-time interface check.

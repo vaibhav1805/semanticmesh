@@ -3,7 +3,7 @@ package jsparser
 import (
 	"testing"
 
-	"github.com/semanticmesh/semanticmesh/internal/code"
+	"github.com/vaibhav1805/semanticmesh/internal/code"
 )
 
 // signalByKind finds the first signal with the given detection kind.

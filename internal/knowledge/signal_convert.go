@@ -3,7 +3,7 @@ package knowledge
 import (
 	"sort"
 
-	"github.com/semanticmesh/semanticmesh/internal/code"
+	"github.com/vaibhav1805/semanticmesh/internal/code"
 )
 
 // convertCodeSignalsToDiscovered converts CodeSignal values from code analysis

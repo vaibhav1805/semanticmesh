@@ -7,7 +7,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/semanticmesh/semanticmesh/internal/knowledge"
+	"github.com/vaibhav1805/semanticmesh/internal/knowledge"
 )
 
 // --- Typed input structs for MCP tool arguments ---

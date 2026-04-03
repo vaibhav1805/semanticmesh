@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/semanticmesh/semanticmesh/internal/code"
+	"github.com/vaibhav1805/semanticmesh/internal/code"
 )
 
 // CommentSyntax identifies which comment syntaxes to recognize.

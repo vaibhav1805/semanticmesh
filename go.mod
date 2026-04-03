@@ -1,4 +1,4 @@
-module github.com/semanticmesh/semanticmesh
+module github.com/vaibhav1805/semanticmesh
 
 go 1.25.0
 
