@@ -1,6 +1,9 @@
 package knowledge
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestAllComponentTypes_Returns13Types(t *testing.T) {
 	types := AllComponentTypes()
@@ -162,5 +165,155 @@ func TestSeedConfig_NilSafe(t *testing.T) {
 	ct, conf := sc.ApplySeedConfig("anything")
 	if ct != "" || conf != 0 {
 		t.Errorf("nil SeedConfig: got (%q, %.2f), want (\"\", 0)", ct, conf)
+	}
+}
+
+func TestQueryResult_JSONMarshal(t *testing.T) {
+	qr := &QueryResult{
+		Query:         "impact",
+		Root:          "payment-api",
+		Depth:         2,
+		TraverseMode:  "cascade",
+		MinConfidence: 0.7,
+		MinTier:       "strong-inference",
+		AffectedNodes: []AffectedNode{
+			{Name: "payment-api", Type: "service", Confidence: 1.0, RelationshipType: "direct-dependency", Distance: 0},
+			{Name: "primary-db", Type: "database", Confidence: 0.9, RelationshipType: "direct-dependency", Distance: 1},
+		},
+		Edges: []QueryEdge{
+			{From: "payment-api", To: "primary-db", Confidence: 0.9, Type: "depends-on",
+				RelationshipType: "direct-dependency", Evidence: "connects to primary-db",
+				SourceFile: "docs/payment.md", ExtractionMethod: "structural", SignalsCount: 2},
+		},
+		Metadata: map[string]interface{}{"node_count": 2, "edge_count": 1},
+	}
+
+	b, err := json.Marshal(qr)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(b, &parsed); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v", err)
+	}
+
+	for _, key := range []string{"query", "root", "depth", "affected_nodes", "edges", "metadata"} {
+		if _, ok := parsed[key]; !ok {
+			t.Errorf("missing expected key %q in JSON output", key)
+		}
+	}
+
+	nodes := parsed["affected_nodes"].([]interface{})
+	if len(nodes) != 2 {
+		t.Errorf("affected_nodes: got %d, want 2", len(nodes))
+	}
+}
+
+func TestQueryResult_Validation(t *testing.T) {
+	// Empty root
+	qr := &QueryResult{}
+	if err := qr.Validate(); err == nil {
+		t.Error("expected error for empty root")
+	}
+
+	// No nodes
+	qr = &QueryResult{Root: "A"}
+	if err := qr.Validate(); err == nil {
+		t.Error("expected error for empty affected_nodes")
+	}
+
+	// No edges
+	qr = &QueryResult{
+		Root:          "A",
+		AffectedNodes: []AffectedNode{{Name: "A"}},
+	}
+	if err := qr.Validate(); err == nil {
+		t.Error("expected error for empty edges")
+	}
+
+	// Edge referencing missing node
+	qr = &QueryResult{
+		Root:          "A",
+		AffectedNodes: []AffectedNode{{Name: "A"}},
+		Edges:         []QueryEdge{{From: "A", To: "B"}},
+	}
+	if err := qr.Validate(); err == nil {
+		t.Error("expected error for edge to missing node B")
+	}
+
+	// Valid result
+	qr = &QueryResult{
+		Root:          "A",
+		AffectedNodes: []AffectedNode{{Name: "A"}, {Name: "B"}},
+		Edges:         []QueryEdge{{From: "A", To: "B"}},
+	}
+	if err := qr.Validate(); err != nil {
+		t.Errorf("valid result failed validation: %v", err)
+	}
+}
+
+func TestRelationshipLocationKey_Deterministic(t *testing.T) {
+	loc := RelationshipLocation{File: "docs/service.yaml", Line: 42}
+	key1 := RelationshipLocationKey(loc)
+	key2 := RelationshipLocationKey(loc)
+	if key1 != key2 {
+		t.Errorf("keys not deterministic: %q != %q", key1, key2)
+	}
+	if key1 != "docs/service.yaml:42" {
+		t.Errorf("key format: got %q, want %q", key1, "docs/service.yaml:42")
+	}
+}
+
+func TestRelationshipLocationKey_DifferentLocations(t *testing.T) {
+	loc1 := RelationshipLocation{File: "file1.md", Line: 10}
+	loc2 := RelationshipLocation{File: "file2.md", Line: 20}
+	loc3 := RelationshipLocation{File: "file1.md", Line: 20}
+
+	k1 := RelationshipLocationKey(loc1)
+	k2 := RelationshipLocationKey(loc2)
+	k3 := RelationshipLocationKey(loc3)
+
+	if k1 == k2 {
+		t.Error("different files should have different keys")
+	}
+	if k1 == k3 {
+		t.Error("different lines should have different keys")
+	}
+	if k2 == k3 {
+		t.Error("different file+line combos should have different keys")
+	}
+}
+
+func TestRelationshipLocation_String(t *testing.T) {
+	loc := RelationshipLocation{File: "docs/api.md", Line: 15, Evidence: "depends on postgres"}
+	s := loc.String()
+	if s != "docs/api.md:15 (depends on postgres)" {
+		t.Errorf("String(): got %q", s)
+	}
+
+	loc2 := RelationshipLocation{File: "docs/api.md", Line: 15}
+	s2 := loc2.String()
+	if s2 != "docs/api.md:15" {
+		t.Errorf("String() no evidence: got %q", s2)
+	}
+}
+
+func TestRelationshipLocation_IsValid(t *testing.T) {
+	tests := []struct {
+		name  string
+		loc   RelationshipLocation
+		valid bool
+	}{
+		{"valid", RelationshipLocation{File: "docs/api.md", Line: 10}, true},
+		{"line zero", RelationshipLocation{File: "docs/api.md", Line: 0}, true},
+		{"empty file", RelationshipLocation{File: "", Line: 10}, false},
+		{"absolute path", RelationshipLocation{File: "/tmp/api.md", Line: 10}, false},
+		{"negative line", RelationshipLocation{File: "docs/api.md", Line: -1}, false},
+	}
+	for _, tt := range tests {
+		if got := tt.loc.IsValid(); got != tt.valid {
+			t.Errorf("%s: IsValid() = %v, want %v", tt.name, got, tt.valid)
+		}
 	}
 }

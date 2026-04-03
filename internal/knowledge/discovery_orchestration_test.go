@@ -747,3 +747,144 @@ func TestFilterDiscoveredEdges_Determinism_ThreeRuns(t *testing.T) {
 		t.Errorf("expected 4 edges to pass filter, got %d", len(results[0]))
 	}
 }
+
+// ── FilterSignalsByTier tests ────────────────────────────────────────────────
+
+func TestFilterSignalsByTier_ModerateAndAbove(t *testing.T) {
+	edges := []*DiscoveredEdge{
+		makeDiscoveredEdge("a", "b", 1.0, 1),  // explicit
+		makeDiscoveredEdge("c", "d", 0.8, 1),  // strong-inference
+		makeDiscoveredEdge("e", "f", 0.6, 1),  // moderate
+		makeDiscoveredEdge("g", "h", 0.5, 1),  // weak
+		makeDiscoveredEdge("i", "j", 0.42, 1), // semantic
+		makeDiscoveredEdge("k", "l", 0.4, 1),  // threshold
+	}
+	result := FilterSignalsByTier(edges, TierModerate)
+	if len(result) != 3 {
+		t.Errorf("FilterSignalsByTier(moderate) = %d edges, want 3", len(result))
+	}
+}
+
+func TestFilterSignalsByTier_ExplicitOnly(t *testing.T) {
+	edges := []*DiscoveredEdge{
+		makeDiscoveredEdge("a", "b", 1.0, 1),  // explicit
+		makeDiscoveredEdge("c", "d", 0.96, 1), // explicit
+		makeDiscoveredEdge("e", "f", 0.8, 1),  // strong-inference
+	}
+	result := FilterSignalsByTier(edges, TierExplicit)
+	if len(result) != 2 {
+		t.Errorf("FilterSignalsByTier(explicit) = %d edges, want 2", len(result))
+	}
+}
+
+func TestFilterSignalsByTier_ThresholdReturnsAll(t *testing.T) {
+	edges := []*DiscoveredEdge{
+		makeDiscoveredEdge("a", "b", 1.0, 1),
+		makeDiscoveredEdge("c", "d", 0.8, 1),
+		makeDiscoveredEdge("e", "f", 0.5, 1),
+		makeDiscoveredEdge("g", "h", 0.4, 1),
+	}
+	result := FilterSignalsByTier(edges, TierThreshold)
+	if len(result) != 4 {
+		t.Errorf("FilterSignalsByTier(threshold) = %d edges, want 4", len(result))
+	}
+}
+
+func TestFilterSignalsByTier_NilEdge_Skipped(t *testing.T) {
+	edges := []*DiscoveredEdge{
+		nil,
+		{Edge: nil, Signals: []Signal{}},
+		makeDiscoveredEdge("a", "b", 0.8, 1),
+	}
+	result := FilterSignalsByTier(edges, TierThreshold)
+	if len(result) != 1 {
+		t.Errorf("expected 1 valid edge, got %d", len(result))
+	}
+}
+
+func TestFilterSignalsByTier_InvalidConfidence_Skipped(t *testing.T) {
+	e, _ := NewEdge("a", "b", EdgeMentions, 0.3, "evidence")
+	edges := []*DiscoveredEdge{
+		{Edge: e, Signals: []Signal{}}, // 0.3 is below valid range
+	}
+	result := FilterSignalsByTier(edges, TierThreshold)
+	if len(result) != 0 {
+		t.Errorf("expected 0 edges for invalid confidence, got %d", len(result))
+	}
+}
+
+// ── FilterByConfidenceScore tests ────────────────────────────────────────────
+
+func TestFilterByConfidenceScore_Basic(t *testing.T) {
+	edges := []*DiscoveredEdge{
+		makeDiscoveredEdge("a", "b", 0.9, 1),
+		makeDiscoveredEdge("c", "d", 0.7, 1),
+		makeDiscoveredEdge("e", "f", 0.5, 1),
+	}
+	result := FilterByConfidenceScore(edges, 0.7)
+	if len(result) != 2 {
+		t.Errorf("FilterByConfidenceScore(0.7) = %d edges, want 2", len(result))
+	}
+}
+
+// ── DiscoveryFilterConfig with MinTier/MinScore ──────────────────────────────
+
+func TestFilterDiscoveredEdges_WithMinTier(t *testing.T) {
+	strongTier := TierStrongInference
+	cfg := DefaultDiscoveryFilterConfig()
+	cfg.MinTier = &strongTier
+
+	edges := []*DiscoveredEdge{
+		makeDiscoveredEdge("a", "b", 0.9, 1),  // strong-inference, passes standard + tier
+		makeDiscoveredEdge("c", "d", 0.65, 1), // moderate, passes standard but fails tier
+	}
+	result := FilterDiscoveredEdges(edges, cfg)
+	if len(result) != 1 {
+		t.Errorf("expected 1 edge with MinTier=strong, got %d", len(result))
+	}
+}
+
+func TestFilterDiscoveredEdges_WithMinScore(t *testing.T) {
+	minScore := 0.8
+	cfg := DefaultDiscoveryFilterConfig()
+	cfg.MinScore = &minScore
+
+	edges := []*DiscoveredEdge{
+		makeDiscoveredEdge("a", "b", 0.9, 1),  // passes
+		makeDiscoveredEdge("c", "d", 0.75, 1), // fails MinScore
+	}
+	result := FilterDiscoveredEdges(edges, cfg)
+	if len(result) != 1 {
+		t.Errorf("expected 1 edge with MinScore=0.8, got %d", len(result))
+	}
+}
+
+func TestFilterDiscoveredEdges_WithBothMinTierAndMinScore(t *testing.T) {
+	strongTier := TierStrongInference
+	minScore := 0.85
+	cfg := DefaultDiscoveryFilterConfig()
+	cfg.MinTier = &strongTier
+	cfg.MinScore = &minScore
+
+	edges := []*DiscoveredEdge{
+		makeDiscoveredEdge("a", "b", 0.9, 1),  // passes both
+		makeDiscoveredEdge("c", "d", 0.8, 1),  // passes tier but fails score (0.8 < 0.85)
+		makeDiscoveredEdge("e", "f", 0.65, 1), // fails tier
+	}
+	result := FilterDiscoveredEdges(edges, cfg)
+	if len(result) != 1 {
+		t.Errorf("expected 1 edge with both filters, got %d", len(result))
+	}
+}
+
+func TestFilterDiscoveredEdges_NilMinTier_NoEffect(t *testing.T) {
+	cfg := DefaultDiscoveryFilterConfig()
+	// MinTier and MinScore are nil by default - should behave like before
+	edges := []*DiscoveredEdge{
+		makeDiscoveredEdge("a", "b", 0.65, 1),
+	}
+	result := FilterDiscoveredEdges(edges, cfg)
+	if len(result) != 1 {
+		t.Errorf("nil MinTier should not affect filtering, got %d results", len(result))
+	}
+}

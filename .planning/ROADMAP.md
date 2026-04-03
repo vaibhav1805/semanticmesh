@@ -76,11 +76,13 @@
 
 ### Plans
 
-1. Integrate pageindex as hard dependency for all relationship tracking (REL-05 first)
-2. Define 7-tier confidence mapping and apply to all discovery algorithm outputs
-3. Extend SQLite schema with provenance columns (source_file, extraction_method, last_modified)
-4. Implement visited-set cycle detection in all graph traversal paths
-5. Enforce direct-edge-only default in impact query results
+| # | Plan | Status |
+|---|------|--------|
+| 1 | Pageindex Integration & Deduplication (REL-05 hard dependency) | Complete (2026-03-19) |
+| 2 | Confidence Tier System (REL-01) | Complete (2026-03-19) |
+| 3 | Edge Provenance Schema & Persistence (REL-02) | Complete (2026-03-19) |
+| 4 | Cycle Detection & Traversal (REL-03, REL-04) | Complete (2026-03-19) |
+| 5 | Query Interface: Crawl vs Impact (REL-04) | Complete (2026-03-19) |
 
 ---
 
@@ -227,4 +229,4 @@ Phases 4 and 5 can be worked in parallel once Phase 3 is complete. Phase 5 has n
 
 ---
 *Created: 2026-03-16*
-*Last updated: 2026-03-19 (Phase 1 complete - Plans 2 and 3 closure)*
+*Last updated: 2026-03-19 (Phase 2 complete - all 5 plans done)*

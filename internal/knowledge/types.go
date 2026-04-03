@@ -1,6 +1,10 @@
 package knowledge
 
-import "strings"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 // ComponentType represents the classification of an infrastructure component.
 // The taxonomy is based on common infrastructure patterns from Backstage and
@@ -291,4 +295,194 @@ func (sc *SeedConfig) ApplySeedConfig(name string) (ComponentType, float64) {
 		}
 	}
 	return "", 0
+}
+
+// TraversalState tracks visited nodes, the current DFS path (for cycle
+// detection), detected cycles, and traversal depth during graph traversal.
+type TraversalState struct {
+	// Visited maps node ID → true when the node has been fully processed.
+	Visited map[string]bool
+
+	// Path holds the current DFS ancestor chain (for back-edge detection).
+	Path []string
+
+	// pathSet provides O(1) membership testing for Path.
+	pathSet map[string]bool
+
+	// Cycles collects all detected cycles as slices of node IDs.
+	Cycles [][]string
+
+	// Depth is the current traversal depth (incremented on descent).
+	Depth int
+}
+
+// NewTraversalState returns a ready-to-use TraversalState.
+func NewTraversalState() *TraversalState {
+	return &TraversalState{
+		Visited: make(map[string]bool),
+		pathSet: make(map[string]bool),
+	}
+}
+
+// HasVisited returns true if nodeID was already fully processed.
+func (ts *TraversalState) HasVisited(nodeID string) bool {
+	return ts.Visited[nodeID]
+}
+
+// MarkVisited records nodeID as fully processed.
+func (ts *TraversalState) MarkVisited(nodeID string) {
+	ts.Visited[nodeID] = true
+}
+
+// IsInPath returns true if nodeID is an ancestor in the current DFS path,
+// meaning adding an edge to it would create a cycle.
+func (ts *TraversalState) IsInPath(nodeID string) bool {
+	return ts.pathSet[nodeID]
+}
+
+// AddPathNode appends nodeID to the current DFS path.
+func (ts *TraversalState) AddPathNode(nodeID string) {
+	ts.Path = append(ts.Path, nodeID)
+	ts.pathSet[nodeID] = true
+}
+
+// RemovePathNode pops the last node from the current DFS path.
+func (ts *TraversalState) RemovePathNode() {
+	if len(ts.Path) == 0 {
+		return
+	}
+	last := ts.Path[len(ts.Path)-1]
+	ts.Path = ts.Path[:len(ts.Path)-1]
+	delete(ts.pathSet, last)
+}
+
+// RecordCycle appends a detected cycle to the cycles list. The caller should
+// pass a copy of the path forming the cycle.
+func (ts *TraversalState) RecordCycle(cycle []string) {
+	ts.Cycles = append(ts.Cycles, cycle)
+}
+
+// AtMaxDepth returns true when Depth >= maxDepth, indicating traversal should
+// not descend further.
+func (ts *TraversalState) AtMaxDepth(maxDepth int) bool {
+	return ts.Depth >= maxDepth
+}
+
+// AffectedNode represents a node reached during a query traversal, serialized
+// in JSON results so agents can see what components are affected and at what
+// distance from the root.
+type AffectedNode struct {
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	Confidence       float64 `json:"confidence"`
+	RelationshipType string  `json:"relationship_type"` // "direct-dependency" or "cyclic-dependency"
+	Distance         int     `json:"distance"`          // hops from root node
+}
+
+// QueryEdge represents a single edge in a query result, including full
+// provenance so agents can assess evidence quality.
+type QueryEdge struct {
+	From             string  `json:"from"`
+	To               string  `json:"to"`
+	Confidence       float64 `json:"confidence"`
+	Type             string  `json:"type"`
+	RelationshipType string  `json:"relationship_type"`
+	Evidence         string  `json:"evidence"`
+	SourceFile       string  `json:"source_file"`
+	ExtractionMethod string  `json:"extraction_method"`
+	EvidencePointer  string  `json:"evidence_pointer"`
+	SignalsCount     int     `json:"signals_count"`
+}
+
+// QueryResult is the top-level JSON structure returned by impact and crawl
+// queries. It contains the full subgraph topology plus metadata for agent
+// consumption.
+type QueryResult struct {
+	Query         string                 `json:"query"`
+	Root          string                 `json:"root"`
+	Depth         int                    `json:"depth"`
+	TraverseMode  string                 `json:"traverse_mode"`
+	MinConfidence float64                `json:"min_confidence"`
+	MinTier       string                 `json:"min_tier"`
+	AffectedNodes []AffectedNode         `json:"affected_nodes"`
+	Edges         []QueryEdge            `json:"edges"`
+	Metadata      map[string]interface{} `json:"metadata"`
+}
+
+// String returns a pretty-printed JSON representation of the QueryResult
+// for debugging purposes.
+func (qr *QueryResult) String() string {
+	b, err := json.MarshalIndent(qr, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("QueryResult{query=%q, root=%q, error=%v}", qr.Query, qr.Root, err)
+	}
+	return string(b)
+}
+
+// Validate checks that the QueryResult has structural integrity:
+// - Root is non-empty
+// - AffectedNodes and Edges are non-empty for a valid result
+// - Every edge from/to appears in AffectedNodes
+func (qr *QueryResult) Validate() error {
+	if qr.Root == "" {
+		return fmt.Errorf("QueryResult.Validate: root must not be empty")
+	}
+	if len(qr.AffectedNodes) == 0 {
+		return fmt.Errorf("QueryResult.Validate: affected_nodes must not be empty")
+	}
+	if len(qr.Edges) == 0 {
+		return fmt.Errorf("QueryResult.Validate: edges must not be empty")
+	}
+
+	nodeSet := make(map[string]bool, len(qr.AffectedNodes))
+	for _, n := range qr.AffectedNodes {
+		nodeSet[n.Name] = true
+	}
+	for _, e := range qr.Edges {
+		if !nodeSet[e.From] {
+			return fmt.Errorf("QueryResult.Validate: edge from %q has no corresponding affected_node", e.From)
+		}
+		if !nodeSet[e.To] {
+			return fmt.Errorf("QueryResult.Validate: edge to %q has no corresponding affected_node", e.To)
+		}
+	}
+	return nil
+}
+
+// RelationshipLocation tracks where a relationship was detected in the source
+// documentation. Used for deduplication (same file:line = same evidence) and
+// traceability (agents can see exactly where evidence was found).
+type RelationshipLocation struct {
+	// File is the relative path to the source file (no leading /).
+	File string
+
+	// Line is the line number within File where the relationship was detected (0-indexed is valid).
+	Line int
+
+	// ByteOffset is the byte offset within File for precise positioning.
+	ByteOffset int
+
+	// Evidence is a short snippet of text around the detection point.
+	Evidence string
+}
+
+// RelationshipLocationKey returns a deterministic deduplication key for a
+// location in the format "file:line". Signals at the same file:line are
+// considered duplicates regardless of which algorithm detected them.
+func RelationshipLocationKey(loc RelationshipLocation) string {
+	return fmt.Sprintf("%s:%d", loc.File, loc.Line)
+}
+
+// String returns a human-readable representation of the location.
+func (loc RelationshipLocation) String() string {
+	if loc.Evidence != "" {
+		return fmt.Sprintf("%s:%d (%s)", loc.File, loc.Line, loc.Evidence)
+	}
+	return fmt.Sprintf("%s:%d", loc.File, loc.Line)
+}
+
+// IsValid returns true when the location has a non-empty, relative file path
+// and a non-negative line number.
+func (loc RelationshipLocation) IsValid() bool {
+	return loc.File != "" && !strings.HasPrefix(loc.File, "/") && loc.Line >= 0
 }

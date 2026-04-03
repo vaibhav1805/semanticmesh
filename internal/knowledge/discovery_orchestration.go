@@ -22,6 +22,15 @@ type DiscoveryFilterConfig struct {
 
 	// MinConfidenceTriple is the threshold when 3+ signals agree.
 	MinConfidenceTriple float64
+
+	// MinTier optionally filters by named confidence tier. When set, only
+	// edges whose tier is at least this confident pass. Takes precedence
+	// over MinScore when both are set (stricter of the two wins).
+	MinTier *ConfidenceTier
+
+	// MinScore optionally filters by numeric confidence threshold. When set,
+	// only edges with Confidence >= MinScore pass.
+	MinScore *float64
 }
 
 // DefaultDiscoveryFilterConfig returns the recommended production filter settings.
@@ -57,9 +66,23 @@ func DefaultDiscoveryFilterConfig() DiscoveryFilterConfig {
 func FilterDiscoveredEdges(edges []*DiscoveredEdge, cfg DiscoveryFilterConfig) []*DiscoveredEdge {
 	out := make([]*DiscoveredEdge, 0, len(edges))
 	for _, de := range edges {
-		if passesFilter(de, cfg) {
-			out = append(out, de)
+		if !passesFilter(de, cfg) {
+			continue
 		}
+		// Apply optional tier-based filter.
+		if cfg.MinTier != nil && de.Edge != nil && IsValidConfidenceScore(de.Confidence) {
+			tier := ScoreToTier(de.Confidence)
+			if !TierAtLeast(tier, *cfg.MinTier) {
+				continue
+			}
+		}
+		// Apply optional numeric score filter.
+		if cfg.MinScore != nil && de.Edge != nil {
+			if de.Confidence < *cfg.MinScore {
+				continue
+			}
+		}
+		out = append(out, de)
 	}
 	return out
 }
@@ -131,6 +154,40 @@ func convertNERToDiscovered(edges []*Edge) []*DiscoveredEdge {
 		result = append(result, de)
 	}
 	return result
+}
+
+// FilterSignalsByTier returns only the discovered edges whose confidence
+// maps to a tier at least as high as minTier.
+func FilterSignalsByTier(edges []*DiscoveredEdge, minTier ConfidenceTier) []*DiscoveredEdge {
+	out := make([]*DiscoveredEdge, 0, len(edges))
+	for _, de := range edges {
+		if de == nil || de.Edge == nil {
+			continue
+		}
+		if !IsValidConfidenceScore(de.Confidence) {
+			continue
+		}
+		tier := ScoreToTier(de.Confidence)
+		if TierAtLeast(tier, minTier) {
+			out = append(out, de)
+		}
+	}
+	return out
+}
+
+// FilterByConfidenceScore returns only the discovered edges whose confidence
+// is at least minScore.
+func FilterByConfidenceScore(edges []*DiscoveredEdge, minScore float64) []*DiscoveredEdge {
+	out := make([]*DiscoveredEdge, 0, len(edges))
+	for _, de := range edges {
+		if de == nil || de.Edge == nil {
+			continue
+		}
+		if de.Confidence >= minScore {
+			out = append(out, de)
+		}
+	}
+	return out
 }
 
 // DiscoverAndIntegrateRelationships runs all 4 discovery algorithms in

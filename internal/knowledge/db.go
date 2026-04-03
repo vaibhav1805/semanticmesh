@@ -43,7 +43,7 @@ import (
 
 // SchemaVersion is incremented each time the database schema changes.
 // Migrations run automatically in Migrate() when an older database is opened.
-const SchemaVersion = 3
+const SchemaVersion = 4
 
 // Database wraps an open SQLite connection and provides domain-level
 // read/write operations for indexes and knowledge graphs.
@@ -183,13 +183,19 @@ CREATE INDEX IF NOT EXISTS idx_mentions_file ON component_mentions(file_path);
 
 -- graph_edges: directed edges in the knowledge graph.
 -- confidence must be in [0.0, 1.0] (enforced by CHECK constraint).
+-- Provenance columns track where, how, and when each relationship was detected.
 CREATE TABLE IF NOT EXISTS graph_edges (
-  id         TEXT    PRIMARY KEY,
-  source_id  TEXT    NOT NULL,
-  target_id  TEXT    NOT NULL,
-  type       TEXT    NOT NULL,
-  confidence REAL    NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
-  evidence   TEXT,
+  id                  TEXT    PRIMARY KEY,
+  source_id           TEXT    NOT NULL,
+  target_id           TEXT    NOT NULL,
+  type                TEXT    NOT NULL,
+  confidence          REAL    NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
+  evidence            TEXT,
+  source_file         TEXT,
+  extraction_method   TEXT,
+  detection_evidence  TEXT,
+  evidence_pointer    TEXT,
+  last_modified       INTEGER,
   FOREIGN KEY(source_id) REFERENCES graph_nodes(id) ON DELETE CASCADE,
   FOREIGN KEY(target_id) REFERENCES graph_nodes(id) ON DELETE CASCADE
 );
@@ -287,6 +293,11 @@ func (db *Database) Migrate() error {
 			return fmt.Errorf("knowledge.Database.Migrate: v2→v3: %w", err)
 		}
 	}
+	if current < 4 {
+		if err := db.migrateV3ToV4(); err != nil {
+			return fmt.Errorf("knowledge.Database.Migrate: v3→v4: %w", err)
+		}
+	}
 
 	// Ensure the stored version reflects the latest schema.
 	if current < SchemaVersion {
@@ -363,6 +374,26 @@ CREATE TABLE IF NOT EXISTS component_mentions (
 	return nil
 }
 
+// migrateV3ToV4 adds provenance columns to graph_edges for relationship source tracking.
+// v3→v4: Add source_file, extraction_method, detection_evidence, evidence_pointer, last_modified.
+func (db *Database) migrateV3ToV4() error {
+	alterStatements := []string{
+		`ALTER TABLE graph_edges ADD COLUMN source_file TEXT`,
+		`ALTER TABLE graph_edges ADD COLUMN extraction_method TEXT`,
+		`ALTER TABLE graph_edges ADD COLUMN detection_evidence TEXT`,
+		`ALTER TABLE graph_edges ADD COLUMN evidence_pointer TEXT`,
+		`ALTER TABLE graph_edges ADD COLUMN last_modified INTEGER`,
+	}
+	for _, stmt := range alterStatements {
+		if _, err := db.conn.Exec(stmt); err != nil {
+			if !strings.Contains(err.Error(), "duplicate column") {
+				return fmt.Errorf("exec %q: %w", stmt, err)
+			}
+		}
+	}
+	return nil
+}
+
 // GetSchemaVersion is an alias for GetVersion provided for the plan's API.
 func (db *Database) GetSchemaVersion() int { return db.GetVersion() }
 
@@ -380,6 +411,24 @@ func transaction(dbConn *sql.DB, fn func(*sql.Tx) error) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// ─── SQL helper functions ─────────────────────────────────────────────────────
+
+// nullIfEmpty returns nil (SQL NULL) when s is empty, otherwise returns s.
+func nullIfEmpty(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// nullIfZero returns nil (SQL NULL) when v is 0, otherwise returns v.
+func nullIfZero(v int64) interface{} {
+	if v == 0 {
+		return nil
+	}
+	return v
 }
 
 // ─── index persistence ────────────────────────────────────────────────────────
@@ -860,9 +909,13 @@ func (db *Database) SaveGraph(graph *Graph) error {
 				}
 				_, err := tx.Exec(
 					`INSERT OR REPLACE INTO graph_edges
-					 (id, source_id, target_id, type, confidence, evidence)
-					 VALUES (?, ?, ?, ?, ?, ?)`,
+					 (id, source_id, target_id, type, confidence, evidence,
+					  source_file, extraction_method, detection_evidence, evidence_pointer, last_modified)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					e.ID, e.Source, e.Target, string(e.Type), e.Confidence, e.Evidence,
+					nullIfEmpty(e.SourceFile), nullIfEmpty(e.ExtractionMethod),
+					nullIfEmpty(e.DetectionEvidence), nullIfEmpty(e.EvidencePointer),
+					nullIfZero(e.LastModified),
 				)
 				if err != nil {
 					return fmt.Errorf("insert graph_edge %q: %w", e.ID, err)
@@ -908,7 +961,9 @@ func (db *Database) LoadGraph(graph *Graph) error {
 
 	// Load edges in deterministic order (sorted by source, target, then ID).
 	eRows, err := db.conn.Query(
-		`SELECT id, source_id, target_id, type, confidence, evidence FROM graph_edges ORDER BY source_id ASC, target_id ASC, id ASC`,
+		`SELECT id, source_id, target_id, type, confidence, evidence,
+		        source_file, extraction_method, detection_evidence, evidence_pointer, last_modified
+		 FROM graph_edges ORDER BY source_id ASC, target_id ASC, id ASC`,
 	)
 	if err != nil {
 		return fmt.Errorf("knowledge.Database.LoadGraph: query graph_edges: %w", err)
@@ -918,17 +973,24 @@ func (db *Database) LoadGraph(graph *Graph) error {
 	for eRows.Next() {
 		var id, sourceID, targetID, edgeTypeStr string
 		var confidence float64
-		var evidence sql.NullString
-		if err := eRows.Scan(&id, &sourceID, &targetID, &edgeTypeStr, &confidence, &evidence); err != nil {
+		var evidence, sourceFile, extractionMethod, detectionEvidence, evidencePointer sql.NullString
+		var lastModified sql.NullInt64
+		if err := eRows.Scan(&id, &sourceID, &targetID, &edgeTypeStr, &confidence, &evidence,
+			&sourceFile, &extractionMethod, &detectionEvidence, &evidencePointer, &lastModified); err != nil {
 			return fmt.Errorf("knowledge.Database.LoadGraph: scan edge: %w", err)
 		}
 		e := &Edge{
-			ID:         id,
-			Source:     sourceID,
-			Target:     targetID,
-			Type:       EdgeType(edgeTypeStr),
-			Confidence: confidence,
-			Evidence:   evidence.String,
+			ID:                id,
+			Source:            sourceID,
+			Target:            targetID,
+			Type:              EdgeType(edgeTypeStr),
+			Confidence:        confidence,
+			Evidence:          evidence.String,
+			SourceFile:        sourceFile.String,
+			ExtractionMethod:  extractionMethod.String,
+			DetectionEvidence: detectionEvidence.String,
+			EvidencePointer:   evidencePointer.String,
+			LastModified:      lastModified.Int64,
 		}
 		graph.Edges[id] = e
 		graph.BySource[sourceID] = append(graph.BySource[sourceID], e)

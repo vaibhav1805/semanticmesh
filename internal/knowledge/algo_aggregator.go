@@ -15,17 +15,31 @@ type DiscoverySignal struct {
 	Confidence float64
 	Evidence   string
 	Algorithm  string // e.g. "semantic", "cooccurrence", "structural"
+	Location   RelationshipLocation
 }
 
 // AggregatedEdge is the result of merging multiple DiscoverySignals for the
-// same (source, target) pair.
+// same (source, target) pair (or (source, target, location) triple when using
+// location-aware aggregation).
 type AggregatedEdge struct {
 	Source     string
 	Target     string
 	Type       EdgeType
 	Confidence float64
 	Evidence   string
+	Location   RelationshipLocation
 	Signals    []DiscoverySignal
+}
+
+// AlgorithmWeight maps discovery algorithm names to their weight for weighted
+// averaging during signal aggregation. Higher weights reflect higher-quality
+// algorithms.
+var AlgorithmWeight = map[string]float64{
+	"cooccurrence": 0.3,
+	"ner":          0.5,
+	"structural":   0.6,
+	"semantic":     0.7,
+	"llm":          1.0,
 }
 
 // AggregateSignals merges a flat list of DiscoverySignals by (source, target)
@@ -67,6 +81,96 @@ func AggregateSignals(signals []DiscoverySignal) []AggregatedEdge {
 			Type:       best.Type,
 			Confidence: best.Confidence,
 			Evidence:   best.Evidence,
+			Signals:    sigs,
+		})
+	}
+
+	// Sort for deterministic output.
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Confidence != results[j].Confidence {
+			return results[i].Confidence > results[j].Confidence
+		}
+		if results[i].Source != results[j].Source {
+			return results[i].Source < results[j].Source
+		}
+		return results[i].Target < results[j].Target
+	})
+
+	return results
+}
+
+// algorithmWeight returns the weight for a given algorithm name. Unknown
+// algorithms default to 0.5.
+func algorithmWeight(algo string) float64 {
+	if w, ok := AlgorithmWeight[algo]; ok {
+		return w
+	}
+	return 0.5
+}
+
+// AggregateSignalsByLocation groups signals by (source, target, location) and
+// returns deduplicated edges with aggregated confidence scores using weighted
+// averaging per algorithm.
+//
+// Same relationship detected by multiple algorithms at the same file:line
+// produces a single edge with confidence = sum(confidence_i * weight_i) /
+// sum(weight_i). Same source/target at different locations produce separate
+// edges.
+//
+// The result is sorted by confidence descending, then source+target for
+// determinism.
+func AggregateSignalsByLocation(signals []DiscoverySignal) []AggregatedEdge {
+	if len(signals) == 0 {
+		return nil
+	}
+
+	type groupKey struct {
+		source, target, locationKey string
+	}
+
+	groups := make(map[groupKey][]DiscoverySignal)
+	for _, sig := range signals {
+		locKey := RelationshipLocationKey(sig.Location)
+		key := groupKey{
+			source:      sig.Source,
+			target:      sig.Target,
+			locationKey: locKey,
+		}
+		groups[key] = append(groups[key], sig)
+	}
+
+	results := make([]AggregatedEdge, 0, len(groups))
+	for _, sigs := range groups {
+		// Compute weighted average confidence.
+		var weightedSum, weightTotal float64
+		best := sigs[0]
+		for _, sig := range sigs {
+			w := algorithmWeight(sig.Algorithm)
+			weightedSum += sig.Confidence * w
+			weightTotal += w
+			if sig.Confidence > best.Confidence {
+				best = sig
+			}
+		}
+
+		aggregatedConfidence := best.Confidence
+		if weightTotal > 0 {
+			aggregatedConfidence = weightedSum / weightTotal
+		}
+
+		// Build combined evidence from all signals.
+		evidence := best.Evidence
+		if len(sigs) > 1 {
+			evidence = fmt.Sprintf("%s [%d signals, weighted avg]", evidence, len(sigs))
+		}
+
+		results = append(results, AggregatedEdge{
+			Source:     sigs[0].Source,
+			Target:     sigs[0].Target,
+			Type:       best.Type,
+			Confidence: aggregatedConfidence,
+			Evidence:   evidence,
+			Location:   sigs[0].Location,
 			Signals:    sigs,
 		})
 	}

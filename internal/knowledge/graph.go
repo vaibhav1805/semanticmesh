@@ -391,6 +391,79 @@ func (g *Graph) GetSubgraph(nodeID string, maxDepth int) *Graph {
 	return sub
 }
 
+// --- Cycle-aware traversal ---------------------------------------------------
+
+// TraverseDFS performs a depth-first traversal starting from startNodeID,
+// descending at most maxDepth levels.
+//
+// It uses a visited set to prevent re-processing nodes and an ancestor path
+// to detect back-edges (cycles). Cyclic edges are included in results with
+// RelationshipType set to EdgeCyclicDependency; all other edges are marked
+// EdgeDirectDependency.
+//
+// Returns the TraversalState (with detected cycles) and a slice of *Edge
+// copies representing every edge encountered during the walk.
+//
+// Returns (nil, nil) when startNodeID is not in the graph.
+func (g *Graph) TraverseDFS(startNodeID string, maxDepth int) (*TraversalState, []*Edge) {
+	if _, ok := g.Nodes[startNodeID]; !ok {
+		return nil, nil
+	}
+
+	ts := NewTraversalState()
+	var resultEdges []*Edge
+
+	var dfs func(nodeID string)
+	dfs = func(nodeID string) {
+		ts.MarkVisited(nodeID)
+		ts.AddPathNode(nodeID)
+
+		if !ts.AtMaxDepth(maxDepth) {
+			for _, edge := range g.BySource[nodeID] {
+				// Copy the edge so we don't mutate shared graph state.
+				eCopy := *edge
+				if ts.IsInPath(edge.Target) {
+					// Back-edge: would close a cycle.
+					eCopy.RelationshipType = EdgeCyclicDependency
+					resultEdges = append(resultEdges, &eCopy)
+					// Record the cycle path.
+					cyclePath := make([]string, len(ts.Path)+1)
+					copy(cyclePath, ts.Path)
+					cyclePath[len(cyclePath)-1] = edge.Target
+					ts.RecordCycle(cyclePath)
+				} else {
+					eCopy.RelationshipType = EdgeDirectDependency
+					resultEdges = append(resultEdges, &eCopy)
+					if !ts.HasVisited(edge.Target) {
+						ts.Depth++
+						dfs(edge.Target)
+						ts.Depth--
+					}
+				}
+			}
+		}
+
+		ts.RemovePathNode()
+	}
+
+	dfs(startNodeID)
+	return ts, resultEdges
+}
+
+// GetImpact returns the edges reachable from nodeID, defaulting to direct
+// edges only (maxDepth=1). Set maxDepth > 1 for transitive impact analysis.
+//
+// This is the primary entry point for impact queries. Each edge in the result
+// has its RelationshipType set to indicate whether it is a direct or cyclic
+// dependency.
+func (g *Graph) GetImpact(nodeID string, maxDepth int) []*Edge {
+	if maxDepth < 1 {
+		maxDepth = 1
+	}
+	_, edges := g.TraverseDFS(nodeID, maxDepth)
+	return edges
+}
+
 // --- GraphBuilder ------------------------------------------------------------
 
 // GraphBuilder constructs a Graph from a collection of Documents by running
