@@ -17,8 +17,8 @@ func TestSchemaV3_ComponentTypeColumn(t *testing.T) {
 	defer db.Close()
 
 	// Verify schema version.
-	if v := db.GetSchemaVersion(); v != 4 {
-		t.Errorf("schema version = %d, want 4", v)
+	if v := db.GetSchemaVersion(); v != SchemaVersion {
+		t.Errorf("schema version = %d, want %d", v, SchemaVersion)
 	}
 
 	// Insert a node with component_type.
@@ -185,9 +185,9 @@ CREATE TABLE IF NOT EXISTS graph_edges (id TEXT PRIMARY KEY, source_id TEXT NOT 
 		t.Errorf("migrated component_type = %q, want %q", ct, "unknown")
 	}
 
-	// Verify schema version is now 4.
-	if v := db2.GetSchemaVersion(); v != 4 {
-		t.Errorf("migrated schema version = %d, want 4", v)
+	// Verify schema version is current.
+	if v := db2.GetSchemaVersion(); v != SchemaVersion {
+		t.Errorf("migrated schema version = %d, want %d", v, SchemaVersion)
 	}
 }
 

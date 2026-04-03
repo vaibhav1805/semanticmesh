@@ -266,9 +266,9 @@ func TestMigration_V3toV4(t *testing.T) {
 		t.Fatalf("OpenDB: %v", err)
 	}
 
-	// Verify we're at v4.
-	if v := db.GetSchemaVersion(); v != 4 {
-		t.Errorf("schema version = %d, want 4", v)
+	// Verify we're at the current schema version.
+	if v := db.GetSchemaVersion(); v != SchemaVersion {
+		t.Errorf("schema version = %d, want %d", v, SchemaVersion)
 	}
 
 	// Verify the provenance columns exist by inserting a full edge.
@@ -317,8 +317,8 @@ func TestMigration_V3toV4(t *testing.T) {
 		t.Fatalf("re-open: %v", err)
 	}
 	defer db2.Close()
-	if v := db2.GetSchemaVersion(); v != 4 {
-		t.Errorf("after re-open schema version = %d, want 4", v)
+	if v := db2.GetSchemaVersion(); v != SchemaVersion {
+		t.Errorf("after re-open schema version = %d, want %d", v, SchemaVersion)
 	}
 }
 

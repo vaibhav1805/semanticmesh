@@ -109,13 +109,14 @@
 3. **Multi-algorithm discovery:** Relationships in the export reflect signals from at least 2 discovery algorithms (verified by `extraction_method` provenance field).
 4. **Metadata completeness:** `metadata.json` in ZIP contains `version`, `created_at` (ISO 8601), `component_count`, and `relationship_count` fields, all non-null.
 
+**Plans:** 2 plans
+
 ### Plans
 
-1. Wire cmdExport stub to CmdExport implementation
-2. Integrate component extraction into the scan-extract pipeline
-3. Connect all discovery algorithms to the main relationship pipeline with aggregation
-4. Implement ZIP packaging with SQLite + metadata.json
-5. Add integration test: markdown corpus -> export -> validate ZIP contents
+| # | Plan | Status |
+|---|------|--------|
+| 1 | .graphmdignore, aliasing, and schema v5 indexes | Not started |
+| 2 | Full export pipeline wiring + ZIP packaging + integration test | Not started |
 
 ---
 

@@ -206,14 +206,15 @@ func humanBytes(n int64) string {
 	if n < unit {
 		return fmt.Sprintf("%dB", n)
 	}
-	div, exp := int64(unit), 0
-	for n := n / unit; n >= unit; n /= unit {
+	units := []string{"KB", "MB", "GB", "TB", "PB"}
+	div := int64(unit)
+	exp := 0
+	for i := 0; i < len(units)-1; i++ {
+		if float64(n)/float64(div) < unit {
+			break
+		}
 		div *= unit
 		exp++
 	}
-	units := []string{"KB", "MB", "GB", "TB"}
-	if exp-1 < len(units) {
-		return fmt.Sprintf("%.1f%s", float64(n)/float64(div), units[exp-1])
-	}
-	return fmt.Sprintf("%.1f%s", float64(n)/float64(div), "PB")
+	return fmt.Sprintf("%.1f%s", float64(n)/float64(div), units[exp])
 }

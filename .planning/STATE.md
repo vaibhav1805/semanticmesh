@@ -1,8 +1,8 @@
 # Project State: graphmd v1
 
 **Last updated:** 2026-03-19
-**Current phase:** Phase 2 - Accuracy Foundation (5/5 plans complete)
-**Status:** Phase 2 complete
+**Current phase:** Phase 4 - Import & Query Pipeline (0/3 plans complete)
+**Status:** In progress
 
 ## Phase Progress
 
@@ -10,25 +10,25 @@
 |-------|------|--------|-------------|-----------|
 | 1 | Component Model | Complete (3/3 plans) | COMP-01, COMP-02, COMP-03 | 3/3 |
 | 2 | Accuracy Foundation | Complete (5/5 plans) | REL-01, REL-02, REL-03, REL-04, REL-05 | 5/5 |
-| 3 | Extract & Export Pipeline | Not started | EXTRACT-01, EXTRACT-02, EXTRACT-03, EXPORT-01, EXPORT-02 | 0/5 |
+| 3 | Extract & Export Pipeline | Complete (2/2 plans) | EXTRACT-01, EXTRACT-02, EXTRACT-03, EXPORT-01, EXPORT-02 | 2/2 |
 | 4 | Import & Query Pipeline | Not started | IMPORT-01, IMPORT-02, IMPORT-03 | 0/3 |
 | 5 | Crawl Exploration | Not started | CRAWL-01, CRAWL-02 | 0/2 |
 
 ## Overall Progress
 
 - **Total requirements:** 18
-- **Completed:** 8 (COMP-01, COMP-02, COMP-03, REL-05, REL-01, REL-02, REL-03, REL-04)
+- **Completed:** 13 (COMP-01, COMP-02, COMP-03, REL-05, REL-01, REL-02, REL-03, REL-04, EXTRACT-01, EXTRACT-02, EXTRACT-03, EXPORT-01, EXPORT-02)
 - **In progress:** 0
-- **Not started:** 10
-- **Completion:** 44%
+- **Not started:** 5
+- **Completion:** 72%
 
 ## Current Focus
 
-Phase 2 complete (5/5 plans). All REL requirements satisfied.
+Phase 3 complete (2/2 plans). Export pipeline produces ZIP with graph.db + metadata.json.
 
 ### Next Actions
 
-1. Phase 3, Plan 1: Extract & Export Pipeline
+1. Phase 4, Plan 1: Import pipeline implementation
 
 ## Decisions Log
 
@@ -54,6 +54,13 @@ Phase 2 complete (5/5 plans). All REL requirements satisfied.
 | 2026-03-19 | BFS distance computation separate from DFS traversal | Accurate hop distances for AffectedNode in query results |
 | 2026-03-19 | TraverseMode direct/cascade/full for ImpactQuery | Controls edge inclusion scope for different query intents |
 | 2026-03-19 | CrawlQuery safety limit of 100 for unbounded depth | Prevents runaway queries on large graphs |
+| 2026-03-19 | DefaultIgnorePatterns includes .bmd and .planning alongside standard build dirs | Covers graphmd-specific directories users should not scan |
+| 2026-03-19 | graphmd-aliases.yaml uses canonical->aliases map with lazy reverse lookup | Efficient resolution with sync.Once initialization |
+| 2026-03-19 | Schema version tests use SchemaVersion constant instead of hardcoded values | Forward-compatible test assertions survive future version bumps |
+| 2026-03-19 | ZIP format (graph.db + metadata.json) replaces tar.gz for export | Simpler format, no markdown files in archive, just the computed graph |
+| 2026-03-19 | KnowledgeMetadata and tar helpers retained for backward compat | Legacy import pipeline (importtar.go) still uses tar.gz format |
+| 2026-03-19 | --input flag as alias for --from in export command | Clearer CLI semantics matching success criteria |
+| 2026-03-19 | Export pipeline builds graph directly (no buildIndex) | Avoids double-processing; pipeline composes scan+detect+discover+save |
 
 ## Blockers
 
@@ -62,7 +69,7 @@ None.
 ## Notes
 
 - Brownfield project: scanner, extractor, discovery algorithms, and export logic exist
-- cmdExport stub in main.go needs wiring to CmdExport (Phase 3)
+- cmdExport in main.go now delegates to knowledge.CmdExport (Phase 3 complete)
 - importtar.go has implementation but no CLI command (Phase 4)
 - All code in single package `internal/knowledge` -- sub-packaging may be needed as complexity grows
 - MCP server deferred to v2
@@ -81,7 +88,9 @@ None.
 | 02-04 | Cycle Detection & Traversal | 6 min | 3 | 4 |
 | 02-03 | Edge Provenance Schema | 15 min | 4 | 4 |
 | 02-05 | Query Interface | 8 min | 3 | 4 |
+| 03-01 | Extract Foundations | 2 min | 2 | 7 |
+| 03-02 | Export Pipeline | 5 min | 2 | 4 |
 
 ---
 *Initialized: 2026-03-16*
-*Last plan completed: 02-05 Query Interface (2026-03-19)*
+*Last plan completed: 03-02 Export Pipeline (2026-03-19)*

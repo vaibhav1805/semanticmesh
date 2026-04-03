@@ -23,11 +23,11 @@ Dependency graph export/import pipeline with accurate relationship inference fro
 
 ### Extract & Export Pipeline
 
-- [ ] **EXTRACT-01**: Crawl markdown files recursively with component extraction
-- [ ] **EXTRACT-02**: Infer relationships from markdown references (service names, not just explicit links)
-- [ ] **EXTRACT-03**: Apply multiple discovery algorithms (co-occurrence, structural, NER, semantic) with signal aggregation
-- [ ] **EXPORT-01**: Implement `export` command: build graph → create SQLite database with indexed schema → package as ZIP
-- [ ] **EXPORT-02**: ZIP package includes: database file, metadata file (graph version, extraction timestamp, component count)
+- [x] **EXTRACT-01**: Crawl markdown files recursively with component extraction
+- [x] **EXTRACT-02**: Infer relationships from markdown references (service names, not just explicit links)
+- [x] **EXTRACT-03**: Apply multiple discovery algorithms (co-occurrence, structural, NER, semantic) with signal aggregation
+- [x] **EXPORT-01**: Implement `export` command: build graph → create SQLite database with indexed schema → package as ZIP
+- [x] **EXPORT-02**: ZIP package includes: database file, metadata file (graph version, extraction timestamp, component count)
 
 ### Import & Query Pipeline (Production)
 

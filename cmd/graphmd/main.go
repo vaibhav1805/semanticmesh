@@ -646,21 +646,10 @@ func cmdGraph() {
 }
 
 func cmdExport() {
-	fs := flag.NewFlagSet("export", flag.ExitOnError)
-	dir := fs.String("dir", ".", "Directory to export")
-	output := fs.String("output", "knowledge.tar.gz", "Output tar.gz file")
-	version := fs.String("version", "1.0.0", "Semantic version")
-
-	fs.Parse(os.Args[2:])
-
-	absDir, err := filepath.Abs(*dir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error resolving directory: %v\n", err)
+	if err := knowledge.CmdExport(os.Args[2:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Fprintf(os.Stderr, "Exporting knowledge from %s to %s (version %s)...\n", absDir, *output, *version)
-	fmt.Fprintf(os.Stderr, "Note: Export functionality requires packaging implementation\n")
 }
 
 func cmdClean() {

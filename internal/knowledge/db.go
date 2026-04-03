@@ -43,7 +43,7 @@ import (
 
 // SchemaVersion is incremented each time the database schema changes.
 // Migrations run automatically in Migrate() when an older database is opened.
-const SchemaVersion = 4
+const SchemaVersion = 5
 
 // Database wraps an open SQLite connection and provides domain-level
 // read/write operations for indexes and knowledge graphs.
@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
 );
 CREATE INDEX IF NOT EXISTS idx_nodes_type ON graph_nodes(type);
 CREATE INDEX IF NOT EXISTS idx_nodes_component_type ON graph_nodes(component_type);
+CREATE INDEX IF NOT EXISTS idx_nodes_title ON graph_nodes(title);
 
 -- component_mentions: tracks where each component was detected, providing
 -- provenance for "where was this found?" queries.
@@ -201,6 +202,7 @@ CREATE TABLE IF NOT EXISTS graph_edges (
 );
 CREATE INDEX IF NOT EXISTS idx_edges_source ON graph_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON graph_edges(target_id);
+CREATE INDEX IF NOT EXISTS idx_edges_confidence ON graph_edges(confidence);
 
 -- metadata: arbitrary key/value pairs (schema version, timestamps, etc.).
 CREATE TABLE IF NOT EXISTS metadata (
@@ -298,6 +300,11 @@ func (db *Database) Migrate() error {
 			return fmt.Errorf("knowledge.Database.Migrate: v3→v4: %w", err)
 		}
 	}
+	if current < 5 {
+		if err := db.migrateV4ToV5(); err != nil {
+			return fmt.Errorf("knowledge.Database.Migrate: v4→v5: %w", err)
+		}
+	}
 
 	// Ensure the stored version reflects the latest schema.
 	if current < SchemaVersion {
@@ -389,6 +396,21 @@ func (db *Database) migrateV3ToV4() error {
 			if !strings.Contains(err.Error(), "duplicate column") {
 				return fmt.Errorf("exec %q: %w", stmt, err)
 			}
+		}
+	}
+	return nil
+}
+
+// migrateV4ToV5 adds indexes on graph_nodes.title and graph_edges.confidence
+// for fast component name lookups and confidence filtering by agent queries.
+func (db *Database) migrateV4ToV5() error {
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_nodes_title ON graph_nodes(title)`,
+		`CREATE INDEX IF NOT EXISTS idx_edges_confidence ON graph_edges(confidence)`,
+	}
+	for _, stmt := range indexes {
+		if _, err := db.conn.Exec(stmt); err != nil {
+			return fmt.Errorf("exec %q: %w", stmt, err)
 		}
 	}
 	return nil
