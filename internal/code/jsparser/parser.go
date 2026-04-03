@@ -1,10 +1,11 @@
 package jsparser
 
 import (
-	"net/url"
 	"strings"
 
 	"github.com/graphmd/graphmd/internal/code"
+	"github.com/graphmd/graphmd/internal/code/comments"
+	"github.com/graphmd/graphmd/internal/code/connstring"
 )
 
 // Compile-time check that JSParser implements code.LanguageParser.
@@ -128,21 +129,7 @@ func (p *JSParser) ParseFile(filePath string, content []byte) ([]code.CodeSignal
 			}
 		}
 
-		// Check for comment hints (must come before single-line comment skip)
-		if matches := commentHintPattern.FindStringSubmatch(trimmed); len(matches) >= 2 {
-			signals = append(signals, code.CodeSignal{
-				LineNumber:      lineNum,
-				TargetComponent: matches[1],
-				TargetType:      "unknown",
-				DetectionKind:   "comment_hint",
-				Evidence:        evidenceSnippet(lines, lineNum),
-				Language:        "javascript",
-				Confidence:      0.4,
-			})
-			continue
-		}
-
-		// Skip single-line comments (but comment hints above were already captured)
+		// Skip single-line comments (handled by shared comments.Analyze below)
 		if strings.HasPrefix(trimmed, "//") {
 			continue
 		}
@@ -269,6 +256,35 @@ func (p *JSParser) ParseFile(filePath string, content []byte) ([]code.CodeSignal
 		}
 	}
 
+	// Scan comments using shared comment analyzer
+	commentSignals := comments.Analyze(lines, comments.SyntaxJavaScript, nil)
+	for i := range commentSignals {
+		commentSignals[i].Language = "javascript"
+		commentSignals[i].SourceFile = filePath
+	}
+	signals = append(signals, commentSignals...)
+
+	// Scan for env var references
+	for lineIdx, line := range lines {
+		lineNum := lineIdx + 1
+		refs := connstring.ParseEnvVarRef(line)
+		for _, ref := range refs {
+			if !connstring.IsConnectionEnvVar(ref.Name) {
+				continue
+			}
+			targetType := inferEnvVarTargetType(ref.Name)
+			signals = append(signals, code.CodeSignal{
+				LineNumber:      lineNum,
+				TargetComponent: ref.Name,
+				TargetType:      targetType,
+				DetectionKind:   "env_var_ref",
+				Evidence:        evidenceSnippet(lines, lineNum),
+				Language:        "javascript",
+				Confidence:      0.7,
+			})
+		}
+	}
+
 	return signals, nil
 }
 
@@ -366,19 +382,27 @@ func extractTargetFromLine(line string, argIndex int) string {
 	return extractURLHost(raw)
 }
 
-// extractURLHost extracts the hostname from a URL string.
+// extractURLHost extracts the hostname from a URL string using the shared connstring package.
 func extractURLHost(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return ""
+	if result, ok := connstring.Parse(raw); ok {
+		return result.Host
 	}
-
-	host := u.Hostname()
-	if host != "" {
-		return host
-	}
-
 	return ""
+}
+
+// inferEnvVarTargetType infers a target type from an environment variable name.
+func inferEnvVarTargetType(name string) string {
+	upper := strings.ToUpper(name)
+	switch {
+	case strings.HasPrefix(upper, "DATABASE_") || strings.HasPrefix(upper, "DB_") || strings.HasPrefix(upper, "MONGO_"):
+		return "database"
+	case strings.HasPrefix(upper, "REDIS_"):
+		return "cache"
+	case strings.HasPrefix(upper, "KAFKA_") || strings.HasPrefix(upper, "RABBIT_") || strings.HasPrefix(upper, "AMQP_") || strings.HasPrefix(upper, "NATS_"):
+		return "message-broker"
+	default:
+		return "unknown"
+	}
 }
 
 // evidenceSnippet returns the source line at lineNum (1-based), trimmed, max 200 chars.

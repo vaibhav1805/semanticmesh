@@ -4,11 +4,12 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"net/url"
 	"path/filepath"
 	"strings"
 
 	"github.com/graphmd/graphmd/internal/code"
+	"github.com/graphmd/graphmd/internal/code/comments"
+	"github.com/graphmd/graphmd/internal/code/connstring"
 )
 
 // Compile-time check that GoParser implements code.LanguageParser.
@@ -83,14 +84,14 @@ func (p *GoParser) ParseFile(filePath string, content []byte) ([]code.CodeSignal
 		}
 
 		// Extract target component
-		target := extractTarget(call, pattern)
+		target, targetType := extractTarget(call, pattern)
 
 		lineNum := fset.Position(call.Pos()).Line
 
 		signals = append(signals, code.CodeSignal{
 			LineNumber:      lineNum,
 			TargetComponent: target,
-			TargetType:      pattern.TargetType,
+			TargetType:      targetType,
 			DetectionKind:   pattern.Kind,
 			Evidence:        evidenceSnippet(content, lineNum),
 			Language:        "go",
@@ -100,23 +101,32 @@ func (p *GoParser) ParseFile(filePath string, content []byte) ([]code.CodeSignal
 		return true
 	})
 
-	// Scan comments for dependency hints
-	for _, cg := range f.Comments {
-		for _, c := range cg.List {
-			matches := commentHintPattern.FindStringSubmatch(c.Text)
-			if len(matches) < 2 {
+	// Scan comments using shared comment analyzer
+	lines := strings.Split(string(content), "\n")
+	commentSignals := comments.Analyze(lines, comments.SyntaxGo, nil)
+	for i := range commentSignals {
+		commentSignals[i].Language = "go"
+		commentSignals[i].SourceFile = filePath
+	}
+	signals = append(signals, commentSignals...)
+
+	// Scan for env var references
+	for lineIdx, line := range lines {
+		lineNum := lineIdx + 1
+		refs := connstring.ParseEnvVarRef(line)
+		for _, ref := range refs {
+			if !connstring.IsConnectionEnvVar(ref.Name) {
 				continue
 			}
-
-			lineNum := fset.Position(c.Pos()).Line
+			targetType := inferEnvVarTargetType(ref.Name)
 			signals = append(signals, code.CodeSignal{
 				LineNumber:      lineNum,
-				TargetComponent: matches[1],
-				TargetType:      "unknown",
-				DetectionKind:   "comment_hint",
+				TargetComponent: ref.Name,
+				TargetType:      targetType,
+				DetectionKind:   "env_var_ref",
 				Evidence:        evidenceSnippet(content, lineNum),
 				Language:        "go",
-				Confidence:      0.4,
+				Confidence:      0.7,
 			})
 		}
 	}
@@ -188,17 +198,27 @@ func isVersionSegment(s string) bool {
 	return true
 }
 
-// extractTarget determines the target component name from the call arguments.
-func extractTarget(call *ast.CallExpr, pattern DetectionPattern) string {
+// extractTarget determines the target component name and optionally enriches
+// the signal's TargetType using connstring.Parse.
+func extractTarget(call *ast.CallExpr, pattern DetectionPattern) (string, string) {
+	targetType := pattern.TargetType
+
 	if pattern.ArgIndex >= 0 && pattern.ArgIndex < len(call.Args) {
-		if host := extractURLHost(call, pattern.ArgIndex); host != "" {
-			return host
+		if lit, ok := call.Args[pattern.ArgIndex].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			raw := strings.Trim(lit.Value, `"`)
+			if result, ok := connstring.Parse(raw); ok {
+				// Use connstring's TargetType if it's more specific
+				if result.TargetType != "unknown" {
+					targetType = result.TargetType
+				}
+				return result.Host, targetType
+			}
 		}
 		// For db_connection, try to extract driver name from first arg
 		if pattern.Kind == "db_connection" && pattern.ArgIndex == 1 && len(call.Args) > 0 {
 			if lit, ok := call.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
 				driver := strings.Trim(lit.Value, `"`)
-				return driver
+				return driver, targetType
 			}
 		}
 	}
@@ -212,34 +232,22 @@ func extractTarget(call *ast.CallExpr, pattern DetectionPattern) string {
 			lastPart = parts[len(parts)-2]
 		}
 	}
-	return lastPart
+	return lastPart, targetType
 }
 
-// extractURLHost extracts the hostname from a URL string literal argument.
-func extractURLHost(call *ast.CallExpr, argIndex int) string {
-	if argIndex >= len(call.Args) {
-		return ""
+// inferEnvVarTargetType infers a target type from an environment variable name.
+func inferEnvVarTargetType(name string) string {
+	upper := strings.ToUpper(name)
+	switch {
+	case strings.HasPrefix(upper, "DATABASE_") || strings.HasPrefix(upper, "DB_") || strings.HasPrefix(upper, "MONGO_"):
+		return "database"
+	case strings.HasPrefix(upper, "REDIS_"):
+		return "cache"
+	case strings.HasPrefix(upper, "KAFKA_") || strings.HasPrefix(upper, "RABBIT_") || strings.HasPrefix(upper, "AMQP_") || strings.HasPrefix(upper, "NATS_"):
+		return "message-broker"
+	default:
+		return "unknown"
 	}
-
-	lit, ok := call.Args[argIndex].(*ast.BasicLit)
-	if !ok || lit.Kind != token.STRING {
-		return ""
-	}
-
-	raw := strings.Trim(lit.Value, `"`)
-
-	// Try parsing as URL
-	u, err := url.Parse(raw)
-	if err != nil {
-		return ""
-	}
-
-	host := u.Hostname()
-	if host != "" {
-		return host
-	}
-
-	return ""
 }
 
 // evidenceSnippet returns the source line at lineNum (1-based), trimmed, max 200 chars.

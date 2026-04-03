@@ -336,3 +336,63 @@ func TestInferSourceComponentJS(t *testing.T) {
 		t.Errorf("expected 'my-js-app', got %q", source)
 	}
 }
+
+func TestBoostKnownComponents(t *testing.T) {
+	// Test that RunCodeAnalysis boosts comment_hint signals referencing known components.
+	tmpDir := t.TempDir()
+
+	goMod := `module github.com/example/boost-test
+
+go 1.25.0
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// main.go: HTTP call to payment-api (code-detected) + comment hints
+	mainGo := `package main
+
+import "net/http"
+
+func main() {
+	// Calls payment-api
+	http.Get("http://payment-api:8080/pay")
+	// Depends on unknown-svc
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(mainGo), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	signals, err := code.RunCodeAnalysis(tmpDir, goparser.NewGoParser())
+	if err != nil {
+		t.Fatalf("RunCodeAnalysis failed: %v", err)
+	}
+
+	// Find comment_hint signals
+	var knownHint, unknownHint *code.CodeSignal
+	for i, s := range signals {
+		if s.DetectionKind == "comment_hint" && s.TargetComponent == "payment-api" {
+			knownHint = &signals[i]
+		}
+		if s.DetectionKind == "comment_hint" && s.TargetComponent == "unknown-svc" {
+			unknownHint = &signals[i]
+		}
+	}
+
+	// payment-api is also detected by http_call, so comment_hint should be boosted to 0.5
+	if knownHint == nil {
+		t.Fatal("missing comment_hint signal for payment-api")
+	}
+	if knownHint.Confidence != 0.5 {
+		t.Errorf("known component comment_hint confidence = %f, want 0.5", knownHint.Confidence)
+	}
+
+	// unknown-svc is only in comments, should stay at 0.4
+	if unknownHint == nil {
+		t.Fatal("missing comment_hint signal for unknown-svc")
+	}
+	if unknownHint.Confidence != 0.4 {
+		t.Errorf("unknown component comment_hint confidence = %f, want 0.4", unknownHint.Confidence)
+	}
+}

@@ -24,6 +24,9 @@ func RunCodeAnalysis(dir string, parsers ...LanguageParser) ([]CodeSignal, error
 		return nil, fmt.Errorf("code analysis: %w", err)
 	}
 
+	// Boost comment_hint signals that reference components also found by code detection
+	boostKnownComponents(signals)
+
 	// Set SourceFile to relative paths for cleaner output
 	for i := range signals {
 		if rel, relErr := filepath.Rel(dir, signals[i].SourceFile); relErr == nil {
@@ -32,6 +35,28 @@ func RunCodeAnalysis(dir string, parsers ...LanguageParser) ([]CodeSignal, error
 	}
 
 	return signals, nil
+}
+
+// boostKnownComponents boosts the confidence of comment_hint signals that reference
+// components also detected by code-level analysis (non-comment signals).
+// Known components get confidence 0.5; new/unknown components stay at their original confidence.
+func boostKnownComponents(signals []CodeSignal) {
+	// First pass: collect all unique TargetComponent names from non-comment signals
+	known := make(map[string]bool)
+	for _, s := range signals {
+		if s.DetectionKind != "comment_hint" {
+			known[s.TargetComponent] = true
+		}
+	}
+
+	// Second pass: boost comment_hint signals that reference known components
+	for i := range signals {
+		if signals[i].DetectionKind == "comment_hint" {
+			if known[signals[i].TargetComponent] {
+				signals[i].Confidence = 0.5
+			}
+		}
+	}
 }
 
 // PrintCodeSignalsSummary prints a concise summary of code analysis results to w.

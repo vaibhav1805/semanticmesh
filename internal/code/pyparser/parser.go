@@ -1,11 +1,12 @@
 package pyparser
 
 import (
-	"net/url"
 	"path/filepath"
 	"strings"
 
 	"github.com/graphmd/graphmd/internal/code"
+	"github.com/graphmd/graphmd/internal/code/comments"
+	"github.com/graphmd/graphmd/internal/code/connstring"
 )
 
 // Compile-time check that PythonParser implements code.LanguageParser.
@@ -66,20 +67,8 @@ func (p *PythonParser) ParseFile(filePath string, content []byte) ([]code.CodeSi
 			continue
 		}
 
-		// Check for comment hints (# Calls X, # Depends on X, etc.)
+		// Skip pure comment lines (handled by shared comments.Analyze below)
 		if strings.HasPrefix(trimmed, "#") {
-			matches := commentHintRe.FindStringSubmatch(trimmed)
-			if len(matches) >= 2 {
-				signals = append(signals, code.CodeSignal{
-					LineNumber:      lineNum,
-					TargetComponent: matches[1],
-					TargetType:      "unknown",
-					DetectionKind:   "comment_hint",
-					Evidence:        evidenceSnippet(lines, lineNum),
-					Language:        "python",
-					Confidence:      0.4,
-				})
-			}
 			continue
 		}
 
@@ -109,6 +98,35 @@ func (p *PythonParser) ParseFile(filePath string, content []byte) ([]code.CodeSi
 		if !strings.Contains(codePart, ".") || true {
 			// Check for bare calls (no dot prefix) that match from-imports
 			p.matchBareCalls(codePart, lineNum, lines, importMap, &signals)
+		}
+	}
+
+	// Scan comments using shared comment analyzer
+	commentSignals := comments.Analyze(lines, comments.SyntaxPython, nil)
+	for i := range commentSignals {
+		commentSignals[i].Language = "python"
+		commentSignals[i].SourceFile = filePath
+	}
+	signals = append(signals, commentSignals...)
+
+	// Scan for env var references
+	for lineIdx, line := range lines {
+		lineNum := lineIdx + 1
+		refs := connstring.ParseEnvVarRef(line)
+		for _, ref := range refs {
+			if !connstring.IsConnectionEnvVar(ref.Name) {
+				continue
+			}
+			targetType := inferEnvVarTargetType(ref.Name)
+			signals = append(signals, code.CodeSignal{
+				LineNumber:      lineNum,
+				TargetComponent: ref.Name,
+				TargetType:      targetType,
+				DetectionKind:   "env_var_ref",
+				Evidence:        evidenceSnippet(lines, lineNum),
+				Language:        "python",
+				Confidence:      0.7,
+			})
 		}
 	}
 
@@ -313,32 +331,27 @@ func (p *PythonParser) extractTarget(args string, pattern PyDetectionPattern) st
 }
 
 // extractURLHost extracts the hostname from a URL, connection string, or host:port pair.
-// Returns the original string if no hostname can be extracted.
+// Uses the shared connstring package. Returns the original string if no hostname can be extracted.
 func extractURLHost(raw string) string {
-	// Try parsing as URL (handles http://, postgres://, mongodb://, redis://, etc.)
-	u, err := url.Parse(raw)
-	if err == nil && u.Hostname() != "" {
-		return u.Hostname()
+	if result, ok := connstring.Parse(raw); ok {
+		return result.Host
 	}
-
-	// Handle bare host:port format (e.g., "kafka-broker:9092")
-	if idx := strings.LastIndex(raw, ":"); idx > 0 {
-		host := raw[:idx]
-		port := raw[idx+1:]
-		// Verify the part after colon looks like a port number
-		isPort := len(port) > 0
-		for _, c := range port {
-			if c < '0' || c > '9' {
-				isPort = false
-				break
-			}
-		}
-		if isPort {
-			return host
-		}
-	}
-
 	return raw
+}
+
+// inferEnvVarTargetType infers a target type from an environment variable name.
+func inferEnvVarTargetType(name string) string {
+	upper := strings.ToUpper(name)
+	switch {
+	case strings.HasPrefix(upper, "DATABASE_") || strings.HasPrefix(upper, "DB_") || strings.HasPrefix(upper, "MONGO_"):
+		return "database"
+	case strings.HasPrefix(upper, "REDIS_"):
+		return "cache"
+	case strings.HasPrefix(upper, "KAFKA_") || strings.HasPrefix(upper, "RABBIT_") || strings.HasPrefix(upper, "AMQP_") || strings.HasPrefix(upper, "NATS_"):
+		return "message-broker"
+	default:
+		return "unknown"
+	}
 }
 
 // isTestFile returns true if the filename matches Python test file patterns.

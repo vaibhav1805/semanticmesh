@@ -38,7 +38,7 @@
 
 - [ ] **Phase 9: Code Analysis Foundation** - CodeSignal type, LanguageParser interface, Go parser with import/HTTP/DB/queue/cache detection
 - [x] **Phase 10: Python + JS/TS Parsers** - Python and JavaScript/TypeScript parsers validating the LanguageParser interface generalizes (completed 2026-03-31)
-- [ ] **Phase 11: Connection Strings + Comment Analysis** - Cross-language connection string parsing and code comment dependency extraction
+- [x] **Phase 11: Connection Strings + Comment Analysis** - Cross-language connection string parsing and code comment dependency extraction (completed 2026-04-01)
 - [ ] **Phase 12: Signal Integration** - Schema v6 migration, code as 5th discovery source, confidence-weighted signal merging with provenance
 - [ ] **Phase 13: MCP Server** - MCP server with stdio transport wrapping query interface as 5 tools for LLM agent access
 
@@ -81,7 +81,11 @@ Plans:
   1. Connection strings in URL format (postgres://host/db, redis://host:6379), DSN format, and environment variable references are detected and parsed into component names
   2. Code comments containing dependency hints (e.g., "// Calls user-service API", docstrings referencing infrastructure) produce CodeSignal output
   3. Connection string detection works across Go, Python, and JS/TS source files using shared parsing utilities
-**Plans**: TBD
+**Plans:** 3/3 plans complete
+Plans:
+- [ ] 11-01-PLAN.md — Connection string parser (shared connstring package with TDD)
+- [ ] 11-02-PLAN.md — Comment analyzer (shared comments package with TDD)
+- [ ] 11-03-PLAN.md — Parser integration (replace per-parser duplication, add boost pass)
 
 ### Phase 12: Signal Integration
 **Goal**: Code-detected dependencies merge with markdown-detected dependencies into a single graph with per-source provenance preserved
@@ -123,8 +127,8 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13
 | 7. Silent Loss Reporting | v1.1 | 2 | Complete | 2026-03-29 |
 | 8. Provenance Access | v1.1 | 1 | Complete | 2026-03-29 |
 | 9. Code Analysis Foundation | v2.0 | 2 | Planning complete | - |
-| 10. Python + JS/TS Parsers | 3/3 | Complete   | 2026-03-31 | - |
-| 11. Connection Strings + Comment Analysis | v2.0 | TBD | Not started | - |
+| 10. Python + JS/TS Parsers | 3/3 | Complete    | 2026-03-31 | - |
+| 11. Connection Strings + Comment Analysis | 3/3 | Complete   | 2026-04-01 | - |
 | 12. Signal Integration | v2.0 | TBD | Not started | - |
 | 13. MCP Server | v2.0 | TBD | Not started | - |
 

@@ -101,14 +101,6 @@ var (
 	cjsDestructuredRe = regexp.MustCompile(`^\s*(?:const|let|var)\s+\{([^}]+)\}\s*=\s*require\s*\(\s*['"]([^'"]+)['"]\s*\)`)
 )
 
-// commentHintPattern matches dependency hints in JS/TS comments like:
-//
-//	// Calls payment-api
-//	// Depends on auth-service
-//	// Uses redis-cache
-//	// Connects to primary-db
-var commentHintPattern = regexp.MustCompile(`//\s*(?:Calls|Depends on|Uses|Connects to)\s+(\S+)`)
-
 // packageMethodCallRe matches package.method(...) calls.
 // Group 1: package/alias name, Group 2: method name
 var packageMethodCallRe = regexp.MustCompile(`\b(\w+)\.(\w+)\s*\(`)

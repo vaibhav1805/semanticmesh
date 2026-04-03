@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** AI agents can answer "if this fails, what breaks?" by querying a pre-computed dependency graph
-**Current focus:** Phase 10 - Python/JS/TS Parsers (Complete)
+**Current focus:** Phase 11 - Connection Strings + Comment Analysis
 
 ## Current Position
 
-Phase: 10 of 13 (Python/JS/TS Parsers)
+Phase: 11 of 13 (Connection Strings + Comment Analysis)
 Plan: 3 of 3 complete
-Status: Phase complete
-Last activity: 2026-03-31 — Completed 10-03-PLAN.md (parser integration)
+Status: Phase 11 complete
+Last activity: 2026-04-01 — Completed 11-03-PLAN.md (parser integration)
 
-Progress: [███████████████████░] 92% (24/~26 plans)
+Progress: [█████████████████████] 96% (26/~27 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 24 (v1.0: 15, v1.1: 4, v2.0: 5)
+- Total plans completed: 26 (v1.0: 15, v1.1: 4, v2.0: 7)
 - Total execution time: see milestone records
 
 **By Phase (v1.1 — most recent):**
@@ -31,6 +31,7 @@ Progress: [███████████████████░] 92% (24
 | 8. Provenance Access | 1 | Complete |
 | 9. Code Analysis Foundation | 2/2 | Complete |
 | 10. Python/JS/TS Parsers | 3/3 | Complete |
+| 11. Connection Strings + Comment Analysis | 3/3 | Complete |
 
 ## Accumulated Context
 
@@ -59,6 +60,14 @@ Progress: [███████████████████░] 92% (24
 - Manifest check order for InferSourceComponent: go.mod > pyproject.toml > setup.py > package.json
 - Regex for pyproject.toml/setup.py name extraction (no TOML parser dependency)
 - All three parsers registered at all CLI call sites (index, export, crawl)
+- Comment analyzer uses non-greedy regex to avoid consuming trailing punctuation in docstrings
+- URL filtering in comments uses static blocklist of documentation/example domains
+- Block comment state tracking shared across Go/JS /* */ and Python triple-quote docstrings
+- Consolidated three extractURLHost implementations into shared connstring.Parse with richer type mapping
+- Host:port regex requires leading alpha char to avoid false matches on version strings
+- Go parser extractTarget returns (target, targetType) tuple for connstring-enriched type info
+- boostKnownComponents runs as two-pass in-place mutation in RunCodeAnalysis
+- inferEnvVarTargetType duplicated per parser rather than shared (trivial function, avoids cross-package dep)
 
 ### Pending Todos
 
@@ -70,6 +79,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31
-Stopped at: Completed 10-03-PLAN.md (parser integration - Phase 10 complete)
+Last session: 2026-04-01
+Stopped at: Completed 11-03-PLAN.md (parser integration) — Phase 11 complete
 Resume file: None

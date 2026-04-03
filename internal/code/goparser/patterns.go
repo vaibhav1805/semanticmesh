@@ -1,7 +1,5 @@
 package goparser
 
-import "regexp"
-
 // DetectionPattern defines a mapping from a Go import + function call to an
 // infrastructure dependency signal.
 type DetectionPattern struct {
@@ -72,10 +70,3 @@ func buildPatternIndex(patterns []DetectionPattern) map[string]DetectionPattern 
 	return idx
 }
 
-// commentHintPattern matches dependency hints in comments like:
-//
-//	// Calls payment-api
-//	// Depends on auth-service
-//	// Uses redis-cache
-//	// Connects to primary-db
-var commentHintPattern = regexp.MustCompile(`//\s*(?:Calls|Depends on|Uses|Connects to)\s+(\S+)`)

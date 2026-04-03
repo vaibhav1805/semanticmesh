@@ -93,14 +93,6 @@ var (
 // Group 3: argument string (everything inside parentheses)
 var callPatternRe = regexp.MustCompile(`(?:(\w+)\.)?(\w+)\(([^)]*)\)`)
 
-// commentHintRe matches dependency hints in Python comments like:
-//
-//	# Calls payment-api
-//	# Depends on auth-service
-//	# Uses redis-cache
-//	# Connects to primary-db
-var commentHintRe = regexp.MustCompile(`#\s*(?:Calls|Depends on|Uses|Connects to)\s+(\S+)`)
-
 // stringArgRe extracts the first quoted string argument from a call's argument list.
 var stringArgRe = regexp.MustCompile(`["']([^"']+)["']`)
 
