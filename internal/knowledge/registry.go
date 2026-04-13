@@ -349,6 +349,23 @@ func (r *ComponentRegistry) InitFromGraphWithLLMAndConfig(g *Graph, docs []Docum
 		}
 		components := detector.DetectComponents(g, docs)
 
+		// Add infrastructure components as nodes to the graph
+		// (infrastructure components extracted from text don't have file nodes yet)
+		for _, comp := range components {
+			// Check if this is an infrastructure component (detected via text extraction)
+			if len(comp.DetectionMethods) > 0 && comp.DetectionMethods[0] == "infrastructure-extraction" {
+				// Add as graph node if not already present
+				if _, exists := g.Nodes[comp.ID]; !exists {
+					_ = g.AddNode(&Node{
+						ID:            comp.ID,
+						Type:          "infrastructure",
+						Title:         comp.Name,
+						ComponentType: comp.Type,
+					})
+				}
+			}
+		}
+
 		// Build set of detected component node IDs and map by ID for unified model.
 		// In the unified model, multiple files can belong to the same component (e.g., all files in a service dir).
 		detectedComponentMap = make(map[string]bool)

@@ -24,6 +24,16 @@ func RunCodeAnalysis(dir string, parsers ...LanguageParser) ([]CodeSignal, error
 		return nil, fmt.Errorf("code analysis: %w", err)
 	}
 
+	// Run manifest analyzers (go.mod, etc.) via the ManifestAnalyzer interface.
+	for _, p := range parsers {
+		if ma, ok := p.(ManifestAnalyzer); ok {
+			manSignals, manErr := ma.AnalyzeManifests(dir)
+			if manErr == nil {
+				signals = append(signals, manSignals...)
+			}
+		}
+	}
+
 	// Boost comment_hint signals that reference components also found by code detection
 	boostKnownComponents(signals)
 

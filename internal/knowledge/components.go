@@ -146,13 +146,36 @@ func (cd *ComponentDetector) DetectComponents(graph *Graph, docs []Document) []C
 		docByID[docs[i].ID] = &docs[i]
 	}
 
-	// If components.yaml is present, use ONLY configured components
+	// Detect document-based components (either configured or auto)
+	var components []Component
 	if cd.config != nil {
-		return cd.detectConfiguredComponents(graph, docByID)
+		components = cd.detectConfiguredComponents(graph, docByID)
+	} else {
+		components = cd.detectAutoComponents(graph, docByID)
 	}
 
-	// Otherwise, use auto-detection heuristics
-	return cd.detectAutoComponents(graph, docByID)
+	// Extract infrastructure components mentioned in documentation
+	infraComponents := cd.extractInfrastructureComponents(docs)
+
+	// Merge infrastructure components with document-based components
+	componentMap := make(map[string]Component)
+	for _, comp := range components {
+		componentMap[comp.ID] = comp
+	}
+	for _, infraComp := range infraComponents {
+		// Only add if not already detected
+		if _, exists := componentMap[infraComp.ID]; !exists {
+			componentMap[infraComp.ID] = infraComp
+		}
+	}
+
+	// Convert back to slice
+	merged := make([]Component, 0, len(componentMap))
+	for _, comp := range componentMap {
+		merged = append(merged, comp)
+	}
+
+	return cd.RankComponents(merged)
 }
 
 // detectConfiguredComponents matches configured component patterns to graph nodes.
@@ -168,7 +191,20 @@ func (cd *ComponentDetector) detectConfiguredComponents(graph *Graph, docByID ma
 				ct := ComponentType(entry.Type)
 				typeConf := 1.0
 				if ct == "" || !IsValidComponentType(ct) {
-					ct, typeConf = InferComponentType(entry.ID, node.Title)
+					// Extract content snippet for better type inference
+					var contentSnippet string
+					if doc, ok := docByID[id]; ok {
+						if len(doc.Content) > 500 {
+							contentSnippet = doc.Content[:500]
+						} else {
+							contentSnippet = doc.Content
+						}
+					}
+					if contentSnippet != "" {
+						ct, typeConf = InferComponentType(entry.ID, node.Title, contentSnippet)
+					} else {
+						ct, typeConf = InferComponentType(entry.ID, node.Title)
+					}
 				}
 
 				comp := Component{
@@ -235,15 +271,27 @@ func (cd *ComponentDetector) detectAutoComponents(graph *Graph, docByID map[stri
 		}
 
 		// Extract endpoints if we have the document.
+		var contentSnippet string
 		if doc, ok := docByID[id]; ok {
 			comp.Endpoints = cd.DetectEndpoints(doc)
+			// Extract first 500 chars of content for type inference
+			if len(doc.Content) > 500 {
+				contentSnippet = doc.Content[:500]
+			} else {
+				contentSnippet = doc.Content
+			}
 		}
 
 		comp.Confidence = confidence
 
 		// Infer component type if not already set.
+		// Pass content snippet as additional context for better classification.
 		if comp.Type == "" || comp.Type == ComponentTypeUnknown {
-			comp.Type, comp.TypeConfidence = InferComponentType(comp.ID, comp.Name, node.Title)
+			if contentSnippet != "" {
+				comp.Type, comp.TypeConfidence = InferComponentType(comp.ID, comp.Name, node.Title, contentSnippet)
+			} else {
+				comp.Type, comp.TypeConfidence = InferComponentType(comp.ID, comp.Name, node.Title)
+			}
 		}
 
 		// Only store this component if we don't have one yet or this has higher confidence
@@ -590,4 +638,43 @@ func matchesPatterns(nodeID, title string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// extractInfrastructureComponents scans all documents for mentions of
+// infrastructure components (databases, cloud services, message brokers, etc.)
+// and returns them as Component objects.
+func (cd *ComponentDetector) extractInfrastructureComponents(docs []Document) []Component {
+	infraMap := make(map[string]Component) // Deduplicate by component name
+
+	for _, doc := range docs {
+		mentions := ExtractInfrastructureMentions(&doc)
+
+		for _, mention := range mentions {
+			// Skip if we've already added this infrastructure component
+			if _, exists := infraMap[mention.ComponentName]; exists {
+				continue
+			}
+
+			// Create a component for this infrastructure mention
+			comp := Component{
+				ID:               mention.ComponentName,
+				Name:             mention.ComponentName,
+				File:             mention.SourceFile,
+				Confidence:       mention.Confidence,
+				Type:             mention.ComponentType,
+				TypeConfidence:   mention.Confidence,
+				DetectionMethods: []string{"infrastructure-extraction"},
+			}
+
+			infraMap[mention.ComponentName] = comp
+		}
+	}
+
+	// Convert map to slice
+	components := make([]Component, 0, len(infraMap))
+	for _, comp := range infraMap {
+		components = append(components, comp)
+	}
+
+	return components
 }

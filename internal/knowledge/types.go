@@ -60,6 +60,18 @@ const (
 	// (e.g. elasticsearch, splunk, loki, fluentd).
 	ComponentTypeLogAggregator ComponentType = "log-aggregator"
 
+	// ComponentTypeOrchestrator represents a container orchestration platform
+	// (e.g. kubernetes, nomad, mesos, docker-swarm).
+	ComponentTypeOrchestrator ComponentType = "orchestrator"
+
+	// ComponentTypeSecretsManager represents a secrets management service
+	// (e.g. vault, aws-secrets-manager, azure-key-vault).
+	ComponentTypeSecretsManager ComponentType = "secrets-manager"
+
+	// ComponentTypeSearch represents a search engine
+	// (e.g. elasticsearch, solr, algolia, meilisearch).
+	ComponentTypeSearch ComponentType = "search"
+
 	// ComponentTypeUnknown is the default type assigned when automatic detection
 	// cannot determine a more specific classification.
 	ComponentTypeUnknown ComponentType = "unknown"
@@ -80,6 +92,9 @@ var allComponentTypes = []ComponentType{
 	ComponentTypeConfigServer,
 	ComponentTypeMonitoring,
 	ComponentTypeLogAggregator,
+	ComponentTypeOrchestrator,
+	ComponentTypeSecretsManager,
+	ComponentTypeSearch,
 	ComponentTypeUnknown,
 }
 
@@ -135,6 +150,12 @@ func ComponentTypeDescription(t ComponentType) string {
 		return "Observability and monitoring platform"
 	case ComponentTypeLogAggregator:
 		return "Log collection and search platform"
+	case ComponentTypeOrchestrator:
+		return "Container orchestration platform"
+	case ComponentTypeSecretsManager:
+		return "Secrets management service"
+	case ComponentTypeSearch:
+		return "Search engine"
 	case ComponentTypeUnknown:
 		return "Unclassified component (default)"
 	default:
@@ -148,12 +169,14 @@ func ComponentTypeDescription(t ComponentType) string {
 var componentTypePatterns = map[ComponentType][]string{
 	ComponentTypeService: {
 		"service", "api", "server", "worker", "backend", "microservice",
-		"app", "application",
+		"app", "application", "rest api", "http endpoint", "graphql",
+		"grpc service", "web service", "endpoint", "controller",
 	},
 	ComponentTypeDatabase: {
 		"database", "db", "postgres", "postgresql", "mysql", "mariadb",
 		"mongodb", "mongo", "dynamodb", "cockroachdb", "cassandra",
 		"couchdb", "sqlite", "rds", "aurora", "datastore", "store",
+		"data store", "persistence", "relational", "nosql", "sql",
 	},
 	ComponentTypeCache: {
 		"cache", "redis", "memcached", "memcache", "varnish", "cdn",
@@ -166,11 +189,12 @@ var componentTypePatterns = map[ComponentType][]string{
 	ComponentTypeMessageBroker: {
 		"kafka", "rabbitmq", "rabbit", "nats", "pulsar", "kinesis",
 		"eventbridge", "event-bus", "message-broker", "broker",
-		"event-stream",
+		"event-stream", "pub/sub", "pubsub", "event streaming",
+		"streaming platform",
 	},
 	ComponentTypeLoadBalancer: {
 		"load-balancer", "loadbalancer", "lb", "haproxy", "envoy",
-		"alb", "elb", "nlb",
+		"alb", "elb", "nlb", "reverse proxy", "nginx", "proxy",
 	},
 	ComponentTypeGateway: {
 		"gateway", "api-gateway", "kong", "traefik", "ambassador",
@@ -196,6 +220,18 @@ var componentTypePatterns = map[ComponentType][]string{
 		"log", "logging", "elasticsearch", "elk", "splunk", "loki",
 		"fluentd", "logstash", "kibana", "log-aggregator",
 	},
+	ComponentTypeOrchestrator: {
+		"orchestrator", "kubernetes", "k8s", "nomad", "mesos",
+		"docker-swarm", "swarm", "openshift", "rancher",
+	},
+	ComponentTypeSecretsManager: {
+		"secrets-manager", "secrets", "vault", "aws-secrets-manager",
+		"secretsmanager", "azure-key-vault", "key-vault",
+	},
+	ComponentTypeSearch: {
+		"search", "elasticsearch", "solr", "algolia", "meilisearch",
+		"opensearch",
+	},
 }
 
 // InferComponentType attempts to classify a component based on its name and
@@ -204,8 +240,8 @@ var componentTypePatterns = map[ComponentType][]string{
 //
 // Matching priority:
 //  1. Exact type name match (e.g. name == "database") -> 0.95
-//  2. Pattern substring match in name -> 0.85
-//  3. Pattern substring match in context -> 0.65
+//  2. Pattern substring match in name -> 0.85 (boosted by +0.05 per additional pattern match)
+//  3. Pattern substring match in context -> 0.65-0.75 (weighted by position: title > early context > late context)
 //  4. No match -> (ComponentTypeUnknown, 0.5)
 func InferComponentType(name string, context ...string) (ComponentType, float64) {
 	lowerName := strings.ToLower(name)
@@ -220,36 +256,56 @@ func InferComponentType(name string, context ...string) (ComponentType, float64)
 		}
 	}
 
-	// Priority 2: pattern match in name.
+	// Priority 2: pattern match in name with multi-pattern boosting.
 	// Track best match by specificity (longer pattern = more specific).
+	// Count additional matches to boost confidence.
 	bestType := ComponentTypeUnknown
 	bestLen := 0
+	matchCounts := make(map[ComponentType]int)
+
 	for ct, patterns := range componentTypePatterns {
 		for _, p := range patterns {
-			if strings.Contains(lowerName, p) && len(p) > bestLen {
-				bestType = ct
-				bestLen = len(p)
-			}
-		}
-	}
-	if bestType != ComponentTypeUnknown {
-		return bestType, 0.85
-	}
-
-	// Priority 3: pattern match in context strings.
-	for _, ctx := range context {
-		lowerCtx := strings.ToLower(ctx)
-		for ct, patterns := range componentTypePatterns {
-			for _, p := range patterns {
-				if strings.Contains(lowerCtx, p) && len(p) > bestLen {
+			if strings.Contains(lowerName, p) {
+				matchCounts[ct]++
+				if len(p) > bestLen {
 					bestType = ct
 					bestLen = len(p)
 				}
 			}
 		}
 	}
+
 	if bestType != ComponentTypeUnknown {
-		return bestType, 0.65
+		// Base confidence 0.85, boost by 0.05 per additional pattern (max 0.95)
+		conf := 0.85 + float64(matchCounts[bestType]-1)*0.05
+		if conf > 0.95 {
+			conf = 0.95
+		}
+		return bestType, conf
+	}
+
+	// Priority 3: pattern match in context strings, weighted by position.
+	// First context (usually title) has higher weight than later contexts.
+	for idx, ctx := range context {
+		lowerCtx := strings.ToLower(ctx)
+		// Weight: 0.75 for first context (title), 0.70 for second, 0.65 for rest
+		baseConf := 0.75
+		if idx == 1 {
+			baseConf = 0.70
+		} else if idx > 1 {
+			baseConf = 0.65
+		}
+
+		for ct, patterns := range componentTypePatterns {
+			for _, p := range patterns {
+				if strings.Contains(lowerCtx, p) && len(p) > bestLen {
+					bestType = ct
+					bestLen = len(p)
+					// Return immediately with position-weighted confidence
+					return bestType, baseConf
+				}
+			}
+		}
 	}
 
 	return ComponentTypeUnknown, 0.5

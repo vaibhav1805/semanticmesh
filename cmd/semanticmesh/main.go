@@ -146,11 +146,35 @@ func cmdIndex() {
 	fmt.Fprintf(os.Stderr, "Classifying component types...\n")
 	detector := knowledge.NewComponentDetector()
 	components := detector.DetectComponents(graph, docs)
+
+	// Add infrastructure components as nodes to the graph
+	// (they were extracted from text but don't have file nodes)
+	for _, comp := range components {
+		if len(comp.DetectionMethods) > 0 && comp.DetectionMethods[0] == "infrastructure-extraction" {
+			// Add as graph node if not already present
+			if _, exists := graph.Nodes[comp.ID]; !exists {
+				_ = graph.AddNode(&knowledge.Node{
+					ID:            comp.ID,
+					Type:          "infrastructure",
+					Title:         comp.Name,
+					ComponentType: comp.Type,
+				})
+			}
+		}
+	}
+
 	var mentions []knowledge.ComponentMention
 	typeCount := 0
 	for _, comp := range components {
+		// For infrastructure components, use comp.ID as the node ID
+		// For document-based components, use comp.File as the node ID
+		nodeID := comp.File
+		if len(comp.DetectionMethods) > 0 && comp.DetectionMethods[0] == "infrastructure-extraction" {
+			nodeID = comp.ID
+		}
+
 		// Update the graph node with the detected component type.
-		if node, ok := graph.Nodes[comp.File]; ok {
+		if node, ok := graph.Nodes[nodeID]; ok {
 			node.ComponentType = comp.Type
 			typeCount++
 		}
@@ -160,7 +184,7 @@ func cmdIndex() {
 			methods = strings.Join(comp.DetectionMethods, ",")
 		}
 		mentions = append(mentions, knowledge.ComponentMention{
-			ComponentID: comp.File,
+			ComponentID: nodeID,  // Use nodeID (could be comp.ID for infra or comp.File for docs)
 			FilePath:    comp.File,
 			DetectedBy:  methods,
 			Confidence:  comp.TypeConfidence,
@@ -193,6 +217,16 @@ func cmdIndex() {
 		} else {
 			code.PrintCodeSignalsSummary(os.Stderr, signals)
 			fmt.Fprintf(os.Stderr, "Code analysis: %d signals detected\n", len(signals))
+
+			// Save code signals to database
+			if len(signals) > 0 {
+				sourceComponent := code.InferSourceComponent(absDir)
+				if err := db.SaveCodeSignals(signals, sourceComponent); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to save code signals: %v\n", err)
+				} else {
+					fmt.Fprintf(os.Stderr, "✓ Saved %d code signals to database\n", len(signals))
+				}
+			}
 		}
 	}
 

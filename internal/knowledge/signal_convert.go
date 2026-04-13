@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/vaibhav1805/semanticmesh/internal/code"
 )
@@ -162,8 +163,13 @@ func integrateCodeSignals(graph *Graph, discovered []*DiscoveredEdge, signals []
 	// Convert code signals to DiscoveredEdge values.
 	codeEdges := convertCodeSignalsToDiscovered(signals, sourceComponent)
 
+	// Build a map of target component → best target type from original signals.
+	// This preserves type information from go.mod/SDK detection that would
+	// otherwise be lost during conversion to DiscoveredEdge.
+	signalTargetTypes := buildSignalTargetTypes(signals)
+
 	// Create stub nodes for targets not already in the graph.
-	ensureCodeTargetNodes(graph, codeEdges)
+	ensureCodeTargetNodes(graph, codeEdges, signalTargetTypes)
 
 	// Merge code edges with markdown-discovered edges.
 	allEdges := MergeDiscoveredEdges(discovered, codeEdges)
@@ -189,26 +195,130 @@ func integrateCodeSignals(graph *Graph, discovered []*DiscoveredEdge, signals []
 // (and sources) that do not already exist in the graph. This prevents
 // dangling edge references when code signals introduce new components not
 // found in markdown documentation.
-func ensureCodeTargetNodes(g *Graph, codeEdges []*DiscoveredEdge) {
+//
+// Noise filtering: targets that look like common English words, bare URL
+// domains, or very short tokens are skipped to prevent polluting the graph
+// with non-component names extracted from code comments.
+func ensureCodeTargetNodes(g *Graph, codeEdges []*DiscoveredEdge, signalTargetTypes map[string]string) {
 	for _, de := range codeEdges {
 		// Check target.
 		if _, ok := g.Nodes[de.Target]; !ok {
+			if isNoiseTarget(de.Target) {
+				continue
+			}
+			ct := resolveComponentType(de.Target, signalTargetTypes)
 			_ = g.AddNode(&Node{
 				ID:            de.Target,
 				Type:          "infrastructure",
 				Title:         de.Target,
-				ComponentType: ComponentTypeUnknown,
+				ComponentType: ct,
 			})
 		}
 
 		// Check source (may not be a markdown-originated node).
 		if _, ok := g.Nodes[de.Source]; !ok {
+			if isNoiseTarget(de.Source) {
+				continue
+			}
+			ct := resolveComponentType(de.Source, signalTargetTypes)
 			_ = g.AddNode(&Node{
 				ID:            de.Source,
 				Type:          "infrastructure",
 				Title:         de.Source,
-				ComponentType: ComponentTypeUnknown,
+				ComponentType: ct,
 			})
 		}
 	}
+}
+
+// buildSignalTargetTypes creates a map from target component name to the best
+// (most specific) target type across all signals. Prefers non-"unknown" types.
+func buildSignalTargetTypes(signals []code.CodeSignal) map[string]string {
+	types := make(map[string]string)
+	for _, sig := range signals {
+		if sig.TargetComponent == "" {
+			continue
+		}
+		existing := types[sig.TargetComponent]
+		// Prefer non-unknown types; among non-unknown, prefer higher confidence signals.
+		if existing == "" || existing == "unknown" {
+			types[sig.TargetComponent] = sig.TargetType
+		}
+	}
+	return types
+}
+
+// resolveComponentType determines the best ComponentType for a node by checking
+// the signal-provided target type first, then falling back to InferComponentType.
+func resolveComponentType(name string, signalTargetTypes map[string]string) ComponentType {
+	// First try the signal's target type (from go.mod, SDK detection, etc.).
+	if st, ok := signalTargetTypes[name]; ok && st != "" && st != "unknown" {
+		return ComponentType(st)
+	}
+	// Fall back to name-based inference.
+	ct, _ := InferComponentType(name)
+	return ct
+}
+
+// isNoiseTarget returns true when name looks like a common English word,
+// a bare URL/domain, or is too short to be a meaningful component name.
+// These arise when code-analysis extractors match dependency-verb patterns
+// in code comments (e.g. "uses the", "calls made", "depends on here").
+func isNoiseTarget(name string) bool {
+	if len(name) < 3 {
+		return true
+	}
+
+	lower := strings.ToLower(name)
+
+	// Reject bare domains (contain dots but no slashes indicating a path).
+	if strings.Contains(lower, ".") && !strings.Contains(lower, "/") {
+		parts := strings.Split(lower, ".")
+		lastPart := parts[len(parts)-1]
+		// Common TLDs indicate a URL domain, not a component.
+		switch lastPart {
+		case "com", "io", "org", "net", "dev", "app", "co", "cloud", "ai":
+			return true
+		}
+	}
+
+	// Reject common English stop-words that appear after dependency verbs
+	// in code comments (e.g. "depends on the", "uses a", "calls here").
+	if codeNoiseWords[lower] {
+		return true
+	}
+
+	return false
+}
+
+// codeNoiseWords is a set of common English words that should never become
+// component names. These frequently appear after dependency-verb patterns
+// ("uses X", "depends on X", "calls X") in code comments.
+var codeNoiseWords = map[string]bool{
+	// Articles and pronouns
+	"the": true, "a": true, "an": true, "this": true, "that": true,
+	"it": true, "its": true, "they": true, "them": true, "their": true,
+	"we": true, "our": true, "you": true, "your": true,
+	// Common adverbs / adjectives
+	"all": true, "any": true, "each": true, "every": true, "some": true,
+	"non": true, "new": true, "old": true, "same": true, "other": true,
+	"more": true, "most": true, "only": true, "own": true,
+	// Prepositions and conjunctions
+	"for": true, "from": true, "with": true, "into": true, "here": true,
+	"there": true, "where": true, "when": true, "then": true, "also": true,
+	"not": true, "but": true, "and": true,
+	// Generic programming words
+	"data": true, "value": true, "result": true, "error": true,
+	"input": true, "output": true, "file": true, "path": true,
+	"name": true, "type": true, "list": true, "map": true,
+	"set": true, "get": true, "run": true, "test": true,
+	"true": true, "false": true, "null": true, "nil": true,
+	"made": true, "just": true, "been": true, "being": true,
+	"both": true, "well": true, "still": true,
+	// Common verbs that slip through as captured "names"
+	"done": true, "used": true, "called": true, "given": true,
+	"based": true, "needed": true, "required": true,
+	// Pagination / generic nouns from code comments
+	"pagination": true, "information": true, "configuration": true,
+	"implementation": true, "documentation": true,
 }

@@ -12,8 +12,9 @@ import (
 	"github.com/vaibhav1805/semanticmesh/internal/code/connstring"
 )
 
-// Compile-time check that GoParser implements code.LanguageParser.
+// Compile-time checks.
 var _ code.LanguageParser = (*GoParser)(nil)
+var _ code.ManifestAnalyzer = (*GoParser)(nil)
 
 // GoParser analyzes Go source files for infrastructure dependency signals
 // using the standard library's go/ast package.
@@ -223,6 +224,11 @@ func extractTarget(call *ast.CallExpr, pattern DetectionPattern) (string, string
 		}
 	}
 
+	// Use explicit fallback target if provided.
+	if pattern.FallbackTarget != "" {
+		return pattern.FallbackTarget, targetType
+	}
+
 	// Fallback: derive generic name from import path
 	parts := strings.Split(pattern.ImportPath, "/")
 	lastPart := parts[len(parts)-1]
@@ -245,9 +251,35 @@ func inferEnvVarTargetType(name string) string {
 		return "cache"
 	case strings.HasPrefix(upper, "KAFKA_") || strings.HasPrefix(upper, "RABBIT_") || strings.HasPrefix(upper, "AMQP_") || strings.HasPrefix(upper, "NATS_"):
 		return "message-broker"
+	case strings.HasPrefix(upper, "S3_"):
+		return "storage"
+	case strings.HasPrefix(upper, "ECR_"):
+		return "container-registry"
+	case strings.HasPrefix(upper, "DD_") || strings.HasPrefix(upper, "DATADOG_") ||
+		strings.HasPrefix(upper, "SENTRY_") || strings.HasPrefix(upper, "PROMETHEUS_"):
+		return "monitoring"
+	case strings.HasPrefix(upper, "ELASTICSEARCH_") || strings.HasPrefix(upper, "ELASTIC_"):
+		return "search"
+	case strings.HasPrefix(upper, "VAULT_"):
+		return "secrets-manager"
+	case strings.HasPrefix(upper, "OAUTH_") || strings.HasPrefix(upper, "MXID_"):
+		return "auth-service"
+	case strings.HasPrefix(upper, "SLACK_"):
+		return "notification"
+	case strings.HasPrefix(upper, "ALERT_"):
+		return "alerting"
+	case strings.HasPrefix(upper, "CLOUDPORTAL_"):
+		return "service"
+	case strings.HasPrefix(upper, "GRPC_"):
+		return "service"
 	default:
 		return "unknown"
 	}
+}
+
+// AnalyzeManifests implements code.ManifestAnalyzer by analyzing go.mod.
+func (p *GoParser) AnalyzeManifests(dir string) ([]code.CodeSignal, error) {
+	return AnalyzeGoMod(dir)
 }
 
 // evidenceSnippet returns the source line at lineNum (1-based), trimmed, max 200 chars.

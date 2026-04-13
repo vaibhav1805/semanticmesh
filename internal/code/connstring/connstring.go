@@ -191,6 +191,9 @@ var connSuffixes = []string{
 // Connection-related env var prefixes.
 var connPrefixes = []string{
 	"DATABASE_", "DB_", "REDIS_", "MONGO_", "RABBIT_", "KAFKA_", "NATS_", "AMQP_",
+	"S3_", "AWS_", "DD_", "DATADOG_", "SENTRY_", "ELASTICSEARCH_", "ELASTIC_",
+	"VAULT_", "OAUTH_", "MXID_", "SLACK_", "ALERT_", "ECR_", "GRPC_",
+	"CLOUDPORTAL_", "PROMETHEUS_",
 }
 
 // IsConnectionEnvVar returns true if the environment variable name suggests

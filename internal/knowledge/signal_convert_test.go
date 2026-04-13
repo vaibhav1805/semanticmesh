@@ -224,7 +224,7 @@ func TestEnsureCodeTargetNodes_CreatesStubs(t *testing.T) {
 		{Edge: edge, Signals: []Signal{{SourceType: SignalCode}}},
 	}
 
-	ensureCodeTargetNodes(g, codeEdges)
+	ensureCodeTargetNodes(g, codeEdges, nil)
 
 	if _, ok := g.Nodes["redis"]; !ok {
 		t.Fatal("expected stub node for 'redis' to be created")
@@ -232,6 +232,76 @@ func TestEnsureCodeTargetNodes_CreatesStubs(t *testing.T) {
 	node := g.Nodes["redis"]
 	if node.Type != "infrastructure" {
 		t.Errorf("stub node type = %q, want %q", node.Type, "infrastructure")
+	}
+}
+
+// TestIsNoiseTarget verifies that common English words, bare domains, and
+// short tokens are rejected, while valid component names are accepted.
+func TestIsNoiseTarget(t *testing.T) {
+	noisy := []string{
+		"the", "here", "made", "non", "pagination",
+		"kubernetes.io", "swagger.io", "docs.example.com", "paketo.io",
+		"it", "an", "ab", // short tokens
+		"configuration", "implementation",
+	}
+	for _, name := range noisy {
+		if !isNoiseTarget(name) {
+			t.Errorf("isNoiseTarget(%q) = false, want true", name)
+		}
+	}
+
+	valid := []string{
+		"redis", "postgres", "kafka", "auth-service",
+		"app-manifest-manager", "KUBERNETES_SERVICE_HOST",
+	}
+	for _, name := range valid {
+		if isNoiseTarget(name) {
+			t.Errorf("isNoiseTarget(%q) = true, want false", name)
+		}
+	}
+}
+
+// TestEnsureCodeTargetNodes_FiltersNoise verifies that noise targets do not
+// get stub nodes created in the graph.
+func TestEnsureCodeTargetNodes_FiltersNoise(t *testing.T) {
+	g := NewGraph()
+	_ = g.AddNode(&Node{ID: "my-service", Type: "document", Title: "My Service"})
+
+	noisy := []string{"the", "here", "kubernetes.io", "pagination"}
+	var codeEdges []*DiscoveredEdge
+	for _, target := range noisy {
+		edge, _ := NewEdge("my-service", target, EdgeDependsOn, 0.5, "noisy")
+		codeEdges = append(codeEdges, &DiscoveredEdge{Edge: edge, Signals: []Signal{{SourceType: SignalCode}}})
+	}
+
+	ensureCodeTargetNodes(g, codeEdges, nil)
+
+	for _, target := range noisy {
+		if _, ok := g.Nodes[target]; ok {
+			t.Errorf("noise target %q should not have a node in the graph", target)
+		}
+	}
+}
+
+// TestEnsureCodeTargetNodes_InfersType verifies that valid code-detected
+// targets get proper component type classification via InferComponentType.
+func TestEnsureCodeTargetNodes_InfersType(t *testing.T) {
+	g := NewGraph()
+	_ = g.AddNode(&Node{ID: "my-service", Type: "document", Title: "My Service"})
+
+	edge, _ := NewEdge("my-service", "redis", EdgeDependsOn, 0.8, "redis call")
+	codeEdges := []*DiscoveredEdge{
+		{Edge: edge, Signals: []Signal{{SourceType: SignalCode}}},
+	}
+
+	ensureCodeTargetNodes(g, codeEdges, nil)
+
+	node, ok := g.Nodes["redis"]
+	if !ok {
+		t.Fatal("expected stub node for 'redis'")
+	}
+	if node.ComponentType == "" || node.ComponentType == ComponentTypeUnknown {
+		t.Errorf("expected inferred component type for redis, got %q", node.ComponentType)
 	}
 }
 
@@ -247,7 +317,7 @@ func TestEnsureCodeTargetNodes_SkipsExisting(t *testing.T) {
 		{Edge: edge, Signals: []Signal{{SourceType: SignalCode}}},
 	}
 
-	ensureCodeTargetNodes(g, codeEdges)
+	ensureCodeTargetNodes(g, codeEdges, nil)
 
 	node := g.Nodes["redis"]
 	if node.Title != "Redis Cache" {

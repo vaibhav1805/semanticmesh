@@ -26,6 +26,13 @@ type LanguageParser interface {
 	ParseFile(filePath string, content []byte) ([]CodeSignal, error)
 }
 
+// ManifestAnalyzer is an optional interface that LanguageParsers can implement
+// to analyze project-level manifest files (go.mod, package.json, requirements.txt)
+// for infrastructure dependencies.
+type ManifestAnalyzer interface {
+	AnalyzeManifests(dir string) ([]CodeSignal, error)
+}
+
 // CodeAnalyzer orchestrates code analysis by dispatching files to the appropriate
 // language parser based on file extension.
 type CodeAnalyzer struct {
