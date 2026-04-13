@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/vaibhav1805/semanticmesh/main/.github/logo.svg" alt="semanticmesh logo" width="200"/>
+  <img src="https://raw.githubusercontent.com/vaibhav1805/semanticmesh/main/.github/banner.png" alt="semanticmesh - Map and query dependencies across microservices, databases, and infrastructure" width="800"/>
 </p>
 
 # semanticmesh
@@ -96,8 +96,18 @@ See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for customization options.
 
 ### Installation
 
+**Option 1: Install via curl (Recommended)**
+
 ```bash
-git clone https://github.com/your-org/semanticmesh
+curl -fsSL https://raw.githubusercontent.com/vaibhav1805/semanticmesh/main/install.sh | bash
+```
+
+This will download the latest release binary for your platform (Linux, macOS, Windows).
+
+**Option 2: Build from source**
+
+```bash
+git clone https://github.com/vaibhav1805/semanticmesh
 cd semanticmesh
 go build -o semanticmesh ./cmd/semanticmesh
 ```
