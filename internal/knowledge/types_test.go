@@ -90,6 +90,9 @@ func TestInferComponentType_NameMatches(t *testing.T) {
 		{"k8s-cluster", ComponentTypeOrchestrator, 0.8},
 		{"vault-secrets", ComponentTypeSecretsManager, 0.8},
 		{"algolia-search", ComponentTypeSearch, 0.8},
+		{"deployment-manager", ComponentTypeService, 0.8},
+		{"cluster-operator", ComponentTypeService, 0.8},
+		{"app-manifest-manager/README.md", ComponentTypeService, 0.8},
 	}
 
 	for _, tt := range tests {
