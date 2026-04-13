@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/vaibhav1805/semanticmesh/main/.github/logo.svg" alt="semanticmesh logo" width="200"/>
+</p>
+
 # semanticmesh
 
 Map and query dependencies across microservices, databases, and infrastructure. Answer questions like "if this fails, what breaks?" by querying a pre-computed graph instead of feeding entire architectures to AI agents.
