@@ -6,11 +6,11 @@ import (
 
 func TestAllComponentTypes_Returns13Types(t *testing.T) {
 	types := AllComponentTypes()
-	if len(types) != 13 {
-		t.Fatalf("expected 13 types (12 + unknown), got %d", len(types))
+	if len(types) != 16 {
+		t.Fatalf("expected 16 types (15 + unknown), got %d", len(types))
 	}
 
-	// Verify all 12 named types plus unknown are present.
+	// Verify all 15 named types plus unknown are present.
 	expected := map[ComponentType]bool{
 		ComponentTypeService:           true,
 		ComponentTypeDatabase:          true,
@@ -24,6 +24,9 @@ func TestAllComponentTypes_Returns13Types(t *testing.T) {
 		ComponentTypeConfigServer:      true,
 		ComponentTypeMonitoring:        true,
 		ComponentTypeLogAggregator:     true,
+		ComponentTypeOrchestrator:      true,
+		ComponentTypeSecretsManager:    true,
+		ComponentTypeSearch:            true,
 		ComponentTypeUnknown:           true,
 	}
 	for _, ct := range types {
@@ -38,7 +41,7 @@ func TestAllComponentTypes_Returns13Types(t *testing.T) {
 }
 
 func TestIsValidComponentType(t *testing.T) {
-	// All 12 types + unknown must be valid.
+	// All 15 types + unknown must be valid.
 	for _, ct := range AllComponentTypes() {
 		if !IsValidComponentType(ct) {
 			t.Errorf("IsValidComponentType(%q) = false, want true", ct)
@@ -83,7 +86,10 @@ func TestInferComponentType_NameMatches(t *testing.T) {
 		{"docker-registry", ComponentTypeContainerRegistry, 0.8},
 		{"consul-config", ComponentTypeConfigServer, 0.8},
 		{"prometheus-monitoring", ComponentTypeMonitoring, 0.8},
-		{"elasticsearch-logging", ComponentTypeLogAggregator, 0.8},
+		{"fluentd-logging", ComponentTypeLogAggregator, 0.8},
+		{"k8s-cluster", ComponentTypeOrchestrator, 0.8},
+		{"vault-secrets", ComponentTypeSecretsManager, 0.8},
+		{"algolia-search", ComponentTypeSearch, 0.8},
 	}
 
 	for _, tt := range tests {
@@ -102,8 +108,8 @@ func TestInferComponentType_ContextMatches(t *testing.T) {
 	if ct != ComponentTypeDatabase {
 		t.Errorf("context match: got type %q, want %q", ct, ComponentTypeDatabase)
 	}
-	if conf < 0.6 || conf > 0.7 {
-		t.Errorf("context match: got confidence %.2f, want ~0.65", conf)
+	if conf < 0.7 || conf > 0.8 {
+		t.Errorf("context match: got confidence %.2f, want ~0.75", conf)
 	}
 }
 
