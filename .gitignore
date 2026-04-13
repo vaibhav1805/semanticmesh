@@ -9,3 +9,8 @@ test-data/
 
 # Internal development planning
 .planning/
+.claude/
+
+# IDE
+.idea/
+.vscode/
