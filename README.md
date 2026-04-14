@@ -126,6 +126,40 @@ semanticmesh export --input ./docs --output graph.zip
 semanticmesh export --input ./project --output graph.zip --analyze-code
 ```
 
+### Multi-Repository Setup (for Microservices)
+
+**If you have multiple repos/services**, organize them in a workspace directory first. This allows semanticmesh to detect **cross-service dependencies** by analyzing all codebases together:
+
+```bash
+# Create a workspace
+mkdir my-architecture-workspace
+cd my-architecture-workspace
+
+# Clone all your repos
+git clone https://github.com/org/service-a
+git clone https://github.com/org/service-b
+git clone https://github.com/org/database-docs
+
+# Export the entire workspace
+semanticmesh export --input . --output workspace-graph.zip --analyze-code
+```
+
+**Recommended structure:**
+```
+workspace/
+├── docs/                    # Architecture documentation
+│   ├── architecture.md
+│   └── services/
+├── service-a/              # Go microservice
+├── service-b/              # Python microservice
+└── frontend/               # JavaScript frontend
+```
+
+This approach enables semanticmesh to:
+- Detect dependencies **between services** (e.g., service-a calls service-b's API)
+- Find shared infrastructure usage (e.g., multiple services using the same database)
+- Build a complete dependency graph across your entire architecture
+
 ### Import and Query
 
 Import the exported graph into persistent storage, then query it:
