@@ -1,7 +1,10 @@
 package mcp
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 
@@ -54,6 +57,13 @@ type GraphInfoArgs struct {
 	Graph string `json:"graph,omitempty" jsonschema:"named graph to query (default: most recent import)"`
 }
 
+// GetEmbeddingsArgs holds the input parameters for the get_component_embeddings tool.
+type GetEmbeddingsArgs struct {
+	Components    []string `json:"components" jsonschema:"list of component names to get embeddings for"`
+	Graph         string   `json:"graph,omitempty" jsonschema:"named graph to query (default: most recent import)"`
+	EmbeddingType string   `json:"embedding_type,omitempty" jsonschema:"type of embedding: description, context (default: description)"`
+}
+
 // registerTools registers all 5 MCP tools on the server.
 func registerTools(server *mcpsdk.Server) {
 	mcpsdk.AddTool(server, &mcpsdk.Tool{
@@ -80,6 +90,11 @@ func registerTools(server *mcpsdk.Server) {
 		Name:        "semanticmesh_graph_info",
 		Description: "Get metadata about the loaded dependency graph: name, version, component count, relationship count. Use this first to verify a graph is loaded and assess its scope.",
 	}, handleGraphInfo)
+
+	mcpsdk.AddTool(server, &mcpsdk.Tool{
+		Name:        "get_component_embeddings",
+		Description: "Fetch text embeddings for specified components. Returns 384-dimensional vectors based on component metadata (name, type, description). Use this for semantic similarity analysis, clustering, or when you need dense vector representations of components. NOTE: Currently uses placeholder embeddings; integrate with real embedding models (OpenAI, Cohere, Voyage) for production use.",
+	}, handleGetEmbeddings)
 }
 
 // --- Tool handler functions ---
@@ -155,6 +170,19 @@ func handleGraphInfo(_ context.Context, _ *mcpsdk.CallToolRequest, args GraphInf
 	return marshalResult(result)
 }
 
+// handleGetEmbeddings handles the get_component_embeddings tool call.
+func handleGetEmbeddings(_ context.Context, _ *mcpsdk.CallToolRequest, args GetEmbeddingsArgs) (*mcpsdk.CallToolResult, any, error) {
+	result, err := knowledge.GetComponentEmbeddings(knowledge.EmbeddingParams{
+		Components:    args.Components,
+		GraphName:     args.Graph,
+		EmbeddingType: args.EmbeddingType,
+	})
+	if err != nil {
+		return handleQueryError(err)
+	}
+	return marshalResult(result)
+}
+
 // --- Shared helpers ---
 
 // queryErrorJSON is the JSON representation of a QueryError for MCP tool responses.
@@ -185,13 +213,77 @@ func handleQueryError(err error) (*mcpsdk.CallToolResult, any, error) {
 	return nil, nil, err
 }
 
+// compressionThreshold defines the size (in bytes) above which responses are compressed.
+const compressionThreshold = 20 * 1024 // 20 KB
+
 // marshalResult JSON-encodes a value and returns it as MCP text content.
+// For responses larger than compressionThreshold (20 KB), the JSON is gzip-compressed
+// and base64-encoded, with metadata indicating the encoding and compression stats.
 func marshalResult(v any) (*mcpsdk.CallToolResult, any, error) {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return nil, nil, err
 	}
+
+	originalSize := len(data)
+
+	// If the response is small, return uncompressed
+	if originalSize < compressionThreshold {
+		return &mcpsdk.CallToolResult{
+			Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: string(data)}},
+		}, nil, nil
+	}
+
+	// Compress large responses
+	compressed, err := compressGzip(data)
+	if err != nil {
+		// If compression fails, fall back to uncompressed
+		return &mcpsdk.CallToolResult{
+			Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: string(data)}},
+		}, nil, nil
+	}
+
+	compressedSize := len(compressed)
+
+	// Only use compression if it actually reduces the size
+	if compressedSize >= originalSize {
+		return &mcpsdk.CallToolResult{
+			Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: string(data)}},
+		}, nil, nil
+	}
+
+	// Base64-encode the compressed data for safe transmission
+	encoded := base64.StdEncoding.EncodeToString(compressed)
+
+	// Create metadata with compression information
+	meta := mcpsdk.Meta{
+		"encoding":         "gzip+base64",
+		"original_size":    originalSize,
+		"compressed_size":  compressedSize,
+		"compression_ratio": float64(originalSize) / float64(compressedSize),
+	}
+
 	return &mcpsdk.CallToolResult{
-		Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: string(data)}},
+		Content: []mcpsdk.Content{&mcpsdk.TextContent{
+			Text: encoded,
+			Meta: meta,
+		}},
 	}, nil, nil
+}
+
+// compressGzip compresses data using gzip compression.
+func compressGzip(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+
+	if _, err := gz.Write(data); err != nil {
+		gz.Close()
+		return nil, err
+	}
+
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }

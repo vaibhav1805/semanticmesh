@@ -71,7 +71,9 @@ semanticmesh includes a built-in MCP (Model Context Protocol) server, allowing L
 semanticmesh mcp
 ```
 
-The server exposes five tools over stdio transport: `query_impact`, `query_dependencies`, `query_path`, `list_components`, and `semanticmesh_graph_info`. Configure it in your MCP client (e.g., Claude Desktop) to give agents on-demand access to your infrastructure graph.
+The server exposes six tools over stdio transport: `query_impact`, `query_dependencies`, `query_path`, `list_components`, `get_component_embeddings`, and `semanticmesh_graph_info`. Configure it in your MCP client (e.g., Claude Desktop) to give agents on-demand access to your infrastructure graph.
+
+**New:** The `get_component_embeddings` tool provides 384-dimensional vector embeddings for components, enabling semantic similarity analysis and clustering. Currently uses deterministic placeholder embeddings; see [docs/MCP_SERVER.md](docs/MCP_SERVER.md#get_component_embeddings) for integration guide with real embedding models (OpenAI, Cohere, Voyage).
 
 ### Extensible Type System
 

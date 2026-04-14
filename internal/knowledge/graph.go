@@ -293,6 +293,191 @@ func (g *Graph) FindPaths(from, to string, maxDepth int) [][]string {
 	return results
 }
 
+// findShortestPathExcluding finds the single shortest path from `from` to `to`
+// using BFS with parent tracking. Edges in excludedEdges and nodes in
+// excludedNodes are skipped during traversal.
+//
+// Time complexity: O(V + E). Returns nil when no path exists.
+func (g *Graph) findShortestPathExcluding(from, to string, excludedEdges map[string]bool, excludedNodes map[string]bool) []string {
+	if excludedNodes[from] || excludedNodes[to] {
+		return nil
+	}
+
+	parent := make(map[string]string, len(g.Nodes))
+	visited := make(map[string]bool, len(g.Nodes))
+	visited[from] = true
+	queue := []string{from}
+
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+
+		for _, edge := range g.BySource[cur] {
+			next := edge.Target
+			if visited[next] || excludedNodes[next] {
+				continue
+			}
+			if excludedEdges[cur+"|"+next] {
+				continue
+			}
+			parent[next] = cur
+			if next == to {
+				// Reconstruct path from parent chain.
+				path := []string{to}
+				for node := to; node != from; {
+					node = parent[node]
+					path = append(path, node)
+				}
+				// Reverse to get from→to order.
+				for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+					path[i], path[j] = path[j], path[i]
+				}
+				return path
+			}
+			visited[next] = true
+			queue = append(queue, next)
+		}
+	}
+
+	return nil
+}
+
+// FindShortestPath returns the single shortest path from `from` to `to`.
+// Uses standard BFS with parent tracking — O(V + E) time, no combinatorial
+// explosion regardless of graph density.
+//
+// Returns nil when no path exists or either node is unknown.
+func (g *Graph) FindShortestPath(from, to string) []string {
+	if _, ok := g.Nodes[from]; !ok {
+		return nil
+	}
+	if _, ok := g.Nodes[to]; !ok {
+		return nil
+	}
+	if from == to {
+		return nil
+	}
+	return g.findShortestPathExcluding(from, to, nil, nil)
+}
+
+// FindKShortestPaths returns up to k shortest simple (loopless) paths between
+// from and to using Yen's algorithm. Each iteration finds one more path by
+// systematically deviating from previously found paths.
+//
+// Time complexity: O(k · V · (V + E)) worst case, but typically much faster
+// due to early termination. Returns paths in order of increasing length.
+//
+// Returns nil when no path exists or either node is unknown.
+func (g *Graph) FindKShortestPaths(from, to string, k int) [][]string {
+	if k < 1 {
+		k = 1
+	}
+	if _, ok := g.Nodes[from]; !ok {
+		return nil
+	}
+	if _, ok := g.Nodes[to]; !ok {
+		return nil
+	}
+	if from == to {
+		return nil
+	}
+
+	// A[0] = shortest path.
+	first := g.findShortestPathExcluding(from, to, nil, nil)
+	if first == nil {
+		return nil
+	}
+	results := [][]string{first}
+
+	// B = candidate pool, kept sorted by path length.
+	type candidate struct {
+		path []string
+	}
+	var candidates []candidate
+	seen := make(map[string]bool)
+
+	joinPath := func(p []string) string {
+		key := p[0]
+		for _, n := range p[1:] {
+			key += "|" + n
+		}
+		return key
+	}
+	seen[joinPath(first)] = true
+
+	for i := 1; i < k; i++ {
+		prevPath := results[i-1]
+
+		for j := 0; j < len(prevPath)-1; j++ {
+			spurNode := prevPath[j]
+			rootPath := make([]string, j+1)
+			copy(rootPath, prevPath[:j+1])
+
+			// Exclude edges from spurNode that overlap with existing result roots.
+			excludedEdges := make(map[string]bool)
+			for _, result := range results {
+				if len(result) > j && sharesPrefix(rootPath, result) {
+					excludedEdges[result[j]+"|"+result[j+1]] = true
+				}
+			}
+
+			// Exclude root path nodes (except the spur node itself).
+			excludedNodes := make(map[string]bool)
+			for _, node := range rootPath[:j] {
+				excludedNodes[node] = true
+			}
+
+			spurPath := g.findShortestPathExcluding(spurNode, to, excludedEdges, excludedNodes)
+			if spurPath == nil {
+				continue
+			}
+
+			// Combine: rootPath + spurPath[1:] (spurNode appears in both).
+			totalPath := make([]string, len(rootPath)+len(spurPath)-1)
+			copy(totalPath, rootPath)
+			copy(totalPath[len(rootPath):], spurPath[1:])
+
+			key := joinPath(totalPath)
+			if !seen[key] {
+				seen[key] = true
+				candidates = append(candidates, candidate{path: totalPath})
+			}
+		}
+
+		if len(candidates) == 0 {
+			break
+		}
+
+		// Pick the shortest candidate (ties broken by first found).
+		bestIdx := 0
+		for ci := 1; ci < len(candidates); ci++ {
+			if len(candidates[ci].path) < len(candidates[bestIdx].path) {
+				bestIdx = ci
+			}
+		}
+
+		results = append(results, candidates[bestIdx].path)
+		// Remove chosen candidate.
+		candidates[bestIdx] = candidates[len(candidates)-1]
+		candidates = candidates[:len(candidates)-1]
+	}
+
+	return results
+}
+
+// sharesPrefix returns true if path starts with the same nodes as prefix.
+func sharesPrefix(prefix, path []string) bool {
+	if len(path) < len(prefix) {
+		return false
+	}
+	for i := range prefix {
+		if prefix[i] != path[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // DetectCycles returns all cycles in the graph using iterative DFS with
 // three-colour marking (white/gray/black).
 //

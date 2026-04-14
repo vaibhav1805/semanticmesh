@@ -1,6 +1,6 @@
 # MCP Server
 
-semanticmesh includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes the dependency graph to AI agents. The server runs over stdio transport and provides five tools for querying infrastructure relationships.
+semanticmesh includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes the dependency graph to AI agents. The server runs over stdio transport and provides six tools for querying infrastructure relationships and generating embeddings.
 
 ## Starting the Server
 
@@ -84,6 +84,79 @@ The MCP tools query against imported graphs. If no graph is available, tools ret
 |-----------|------|----------|-------------|
 | `graph` | string | no | Named graph to query (default: most recent import) |
 
+### get_component_embeddings
+
+**Description:** Fetch text embeddings for specified components. Returns 384-dimensional vectors based on component metadata (name, type, description). Use this for semantic similarity analysis, clustering, or when you need dense vector representations of components.
+
+**Note:** Currently uses placeholder embeddings (deterministic hash-based vectors). For production use, integrate with real embedding models (OpenAI, Cohere, Voyage, etc.).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `components` | array[string] | yes | List of component names to get embeddings for |
+| `graph` | string | no | Named graph to query (default: most recent import) |
+| `embedding_type` | string | no | Type of embedding: `description`, `context` (default: `description`) |
+
+**Response:**
+
+```json
+{
+  "embeddings": [
+    {
+      "component": "payment-service/README.md",
+      "vector": [-0.0543, 0.0188, 0.0658, ...],
+      "dimension": 384,
+      "method": "placeholder-deterministic"
+    }
+  ],
+  "metadata": {
+    "count": 1,
+    "embedding_method": "placeholder-deterministic",
+    "dimension": 384,
+    "embedding_type": "description",
+    "not_found": []
+  }
+}
+```
+
+**Use Cases:**
+- Semantic search: "Find components similar to payment-api"
+- Clustering: Group related components by vector similarity
+- Context enrichment: Provide embeddings to LLMs for better understanding
+- Recommendation: Suggest related components based on cosine similarity
+
+**Integration Guide for Real Embeddings:**
+
+To replace placeholder embeddings with real LLM embeddings:
+
+1. Add an embedding client dependency (e.g., OpenAI SDK, Cohere SDK)
+2. In `internal/knowledge/embeddings.go`, replace `generatePlaceholderEmbedding()` with API calls
+3. Update the `method` field to reflect the model used (e.g., `"text-embedding-3-small"`)
+4. Consider caching embeddings in the database to avoid repeated API calls
+5. Add error handling for rate limits, network issues, etc.
+6. Update dimension based on your chosen model (e.g., 1536 for OpenAI's large model)
+
+Example integration with OpenAI:
+
+```go
+import "github.com/openai/openai-go"
+
+func generateRealEmbedding(node *Node, embeddingType string) ([]float64, error) {
+    client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+    
+    text := fmt.Sprintf("%s: %s (%s)", node.Title, node.ID, node.ComponentType)
+    
+    resp, err := client.Embeddings.Create(context.Background(), &openai.EmbeddingCreateParams{
+        Model: openai.EmbeddingModelTextEmbedding3Small,
+        Input: text,
+    })
+    if err != nil {
+        return nil, err
+    }
+    
+    return resp.Data[0].Embedding, nil
+}
+```
+
 ## Response Format
 
 All query tools return a JSON envelope with three top-level fields:
@@ -152,6 +225,7 @@ The `semanticmesh_graph_info` tool returns a simpler structure:
 | `query_dependencies` | `affected_nodes` + `relationships` | Nodes reached by forward traversal, with enriched edges |
 | `query_path` | `paths` + `count` | Array of paths, each with nodes, hops, and total confidence |
 | `list_components` | `components` + `count` | Array of components with name, type, and edge counts |
+| `get_component_embeddings` | `embeddings` + `metadata` | Array of embeddings with vectors, dimensions, and metadata |
 
 ## Error Handling
 

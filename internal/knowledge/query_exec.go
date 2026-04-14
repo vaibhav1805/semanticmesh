@@ -278,8 +278,8 @@ func ExecutePathQuery(params QueryPathParams) (*QueryEnvelope, error) {
 		}
 	}
 
-	// Find paths.
-	rawPaths := g.FindPaths(params.From, params.To, 20)
+	// Find paths using Yen's k-shortest-paths algorithm (BFS-based, safe for dense graphs).
+	rawPaths := g.FindKShortestPaths(params.From, params.To, limit)
 
 	var pathInfos []PathInfo
 	for _, nodePath := range rawPaths {

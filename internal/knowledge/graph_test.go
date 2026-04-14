@@ -402,3 +402,198 @@ func TestTraversalLargeCyclicGraph(t *testing.T) {
 		t.Fatalf("expected 1 cycle in ring graph, got %d", len(ts.Cycles))
 	}
 }
+
+// --- FindShortestPath tests --------------------------------------------------
+
+func TestFindShortestPath_Simple(t *testing.T) {
+	// A → B → C → D
+	g := buildGraph(
+		[]string{"A", "B", "C", "D"},
+		[][2]string{{"A", "B"}, {"B", "C"}, {"C", "D"}},
+	)
+
+	path := g.FindShortestPath("A", "D")
+	if path == nil {
+		t.Fatal("expected a path from A to D")
+	}
+	if len(path) != 4 {
+		t.Fatalf("expected path length 4, got %d: %v", len(path), path)
+	}
+	if path[0] != "A" || path[3] != "D" {
+		t.Fatalf("path should start with A and end with D, got %v", path)
+	}
+}
+
+func TestFindShortestPath_PicksShortest(t *testing.T) {
+	// A → B → C → D (length 3)
+	// A → D         (length 1) — should pick this
+	g := buildGraph(
+		[]string{"A", "B", "C", "D"},
+		[][2]string{{"A", "B"}, {"B", "C"}, {"C", "D"}, {"A", "D"}},
+	)
+
+	path := g.FindShortestPath("A", "D")
+	if len(path) != 2 {
+		t.Fatalf("expected shortest path length 2 (A→D), got %d: %v", len(path), path)
+	}
+}
+
+func TestFindShortestPath_NoPath(t *testing.T) {
+	// A → B, C → D (disconnected)
+	g := buildGraph(
+		[]string{"A", "B", "C", "D"},
+		[][2]string{{"A", "B"}, {"C", "D"}},
+	)
+
+	path := g.FindShortestPath("A", "D")
+	if path != nil {
+		t.Fatalf("expected nil for disconnected nodes, got %v", path)
+	}
+}
+
+func TestFindShortestPath_UnknownNodes(t *testing.T) {
+	g := buildGraph([]string{"A", "B"}, [][2]string{{"A", "B"}})
+
+	if g.FindShortestPath("X", "B") != nil {
+		t.Fatal("expected nil for unknown from")
+	}
+	if g.FindShortestPath("A", "X") != nil {
+		t.Fatal("expected nil for unknown to")
+	}
+}
+
+func TestFindShortestPath_SameNode(t *testing.T) {
+	g := buildGraph([]string{"A"}, nil)
+	if g.FindShortestPath("A", "A") != nil {
+		t.Fatal("expected nil for from == to")
+	}
+}
+
+func TestFindShortestPath_WithCycles(t *testing.T) {
+	// A → B → C → A (cycle), B → D (target)
+	g := buildGraph(
+		[]string{"A", "B", "C", "D"},
+		[][2]string{{"A", "B"}, {"B", "C"}, {"C", "A"}, {"B", "D"}},
+	)
+
+	path := g.FindShortestPath("A", "D")
+	if path == nil {
+		t.Fatal("expected path through cycle")
+	}
+	if len(path) != 3 || path[0] != "A" || path[1] != "B" || path[2] != "D" {
+		t.Fatalf("expected [A B D], got %v", path)
+	}
+}
+
+// --- FindKShortestPaths tests ------------------------------------------------
+
+func TestFindKShortestPaths_SinglePath(t *testing.T) {
+	// A → B → C (only one path)
+	g := buildGraph(
+		[]string{"A", "B", "C"},
+		[][2]string{{"A", "B"}, {"B", "C"}},
+	)
+
+	paths := g.FindKShortestPaths("A", "C", 5)
+	if len(paths) != 1 {
+		t.Fatalf("expected 1 path, got %d", len(paths))
+	}
+}
+
+func TestFindKShortestPaths_MultiplePaths(t *testing.T) {
+	// A → B → D (length 2)
+	// A → C → D (length 2)
+	// A → B → C → D (length 3)
+	g := buildGraph(
+		[]string{"A", "B", "C", "D"},
+		[][2]string{{"A", "B"}, {"A", "C"}, {"B", "D"}, {"C", "D"}, {"B", "C"}},
+	)
+
+	paths := g.FindKShortestPaths("A", "D", 3)
+	if len(paths) < 2 {
+		t.Fatalf("expected at least 2 paths, got %d", len(paths))
+	}
+	// First path should be shortest (length 2).
+	if len(paths[0]) != 3 {
+		t.Fatalf("first path should have 3 nodes, got %d: %v", len(paths[0]), paths[0])
+	}
+	// Paths should be in non-decreasing length order.
+	for i := 1; i < len(paths); i++ {
+		if len(paths[i]) < len(paths[i-1]) {
+			t.Fatalf("paths not sorted by length: path[%d]=%v, path[%d]=%v",
+				i-1, paths[i-1], i, paths[i])
+		}
+	}
+}
+
+func TestFindKShortestPaths_RespectsLimit(t *testing.T) {
+	g := buildGraph(
+		[]string{"A", "B", "C", "D"},
+		[][2]string{{"A", "B"}, {"A", "C"}, {"B", "D"}, {"C", "D"}, {"B", "C"}},
+	)
+
+	paths := g.FindKShortestPaths("A", "D", 1)
+	if len(paths) != 1 {
+		t.Fatalf("expected exactly 1 path with limit=1, got %d", len(paths))
+	}
+}
+
+func TestFindKShortestPaths_NoPath(t *testing.T) {
+	g := buildGraph(
+		[]string{"A", "B", "C"},
+		[][2]string{{"A", "B"}},
+	)
+
+	paths := g.FindKShortestPaths("A", "C", 5)
+	if paths != nil {
+		t.Fatalf("expected nil for no path, got %v", paths)
+	}
+}
+
+// --- Dense graph performance test --------------------------------------------
+
+func TestFindKShortestPaths_DenseGraphPerformance(t *testing.T) {
+	// Simulate the real-world scenario: 126 nodes, ~1000 edges, many cycles.
+	// Each node connects to ~8 random neighbors, creating a dense cyclic graph.
+	const numNodes = 130
+	const edgesPerNode = 8
+
+	nodes := make([]string, numNodes)
+	for i := 0; i < numNodes; i++ {
+		nodes[i] = fmt.Sprintf("comp-%d", i)
+	}
+
+	var edges [][2]string
+	for i := 0; i < numNodes; i++ {
+		for j := 1; j <= edgesPerNode; j++ {
+			target := (i + j*7) % numNodes // deterministic "random" connections
+			if target != i {
+				edges = append(edges, [2]string{nodes[i], nodes[target]})
+			}
+		}
+	}
+
+	g := buildGraph(nodes, edges)
+	t.Logf("dense graph: %d nodes, %d edges", g.NodeCount(), g.EdgeCount())
+
+	// Single shortest path must complete in under 50ms.
+	start := time.Now()
+	path := g.FindShortestPath("comp-0", "comp-100")
+	elapsed := time.Since(start)
+	if elapsed > 50*time.Millisecond {
+		t.Fatalf("FindShortestPath took %v on dense graph, expected < 50ms", elapsed)
+	}
+	if path == nil {
+		t.Fatal("expected path in dense graph")
+	}
+	t.Logf("shortest path (%d hops) found in %v", len(path)-1, elapsed)
+
+	// K shortest paths (k=5) must complete in under 500ms.
+	start = time.Now()
+	paths := g.FindKShortestPaths("comp-0", "comp-100", 5)
+	elapsed = time.Since(start)
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("FindKShortestPaths(k=5) took %v on dense graph, expected < 500ms", elapsed)
+	}
+	t.Logf("found %d paths in %v", len(paths), elapsed)
+}
