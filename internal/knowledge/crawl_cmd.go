@@ -15,6 +15,7 @@ import (
 	"github.com/vaibhav1805/semanticmesh/internal/code/goparser"
 	"github.com/vaibhav1805/semanticmesh/internal/code/jsparser"
 	"github.com/vaibhav1805/semanticmesh/internal/code/pyparser"
+	"github.com/vaibhav1805/semanticmesh/internal/code/tfparser"
 )
 
 // ErrLegacyCrawl is a sentinel error returned by CmdCrawl when the
@@ -154,6 +155,7 @@ func CmdCrawl(args []string) error {
 			goparser.NewGoParser(),
 			pyparser.NewPythonParser(),
 			jsparser.NewJSParser(),
+			tfparser.NewTerraformParser(),
 		)
 		if codeErr != nil {
 			fmt.Fprintf(os.Stderr, "  Warning: code analysis failed: %v\n", codeErr)
