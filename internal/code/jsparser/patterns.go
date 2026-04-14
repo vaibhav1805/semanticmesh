@@ -83,6 +83,38 @@ var DefaultJSPatterns = []JSDetectionPattern{
 
 	// Queue - AWS SQS
 	{Package: "@aws-sdk/client-sqs", Function: "SQSClient", Kind: "queue_producer", TargetType: "queue", Confidence: 0.85, ArgIndex: -1, IsConstructor: true},
+
+	// Web frameworks - Express
+	{Package: "express", Function: "Router", Kind: "http_server", TargetType: "service", Confidence: 0.9, ArgIndex: -1},
+
+	// Web frameworks - Fastify
+	{Package: "fastify", Function: "fastify", Kind: "http_server", TargetType: "service", Confidence: 0.9, ArgIndex: -1},
+
+	// Web frameworks - Koa
+	{Package: "koa", Function: "Koa", Kind: "http_server", TargetType: "service", Confidence: 0.9, ArgIndex: -1, IsConstructor: true},
+
+	// Database - TypeORM
+	{Package: "typeorm", Function: "createConnection", Kind: "db_connection", TargetType: "database", Confidence: 0.85, ArgIndex: -1},
+	{Package: "typeorm", Function: "DataSource", Kind: "db_connection", TargetType: "database", Confidence: 0.85, ArgIndex: -1, IsConstructor: true},
+
+	// Database - Knex
+	{Package: "knex", Function: "knex", Kind: "db_connection", TargetType: "database", Confidence: 0.85, ArgIndex: -1},
+
+	// Cache - node-cache
+	{Package: "node-cache", Function: "NodeCache", Kind: "cache_client", TargetType: "cache", Confidence: 0.85, ArgIndex: -1, IsConstructor: true},
+
+	// Search - Elasticsearch
+	{Package: "@elastic/elasticsearch", Function: "Client", Kind: "search_client", TargetType: "search", Confidence: 0.85, ArgIndex: -1, IsConstructor: true},
+
+	// AWS SDK - S3
+	{Package: "@aws-sdk/client-s3", Function: "S3Client", Kind: "storage_client", TargetType: "storage", Confidence: 0.85, ArgIndex: -1, IsConstructor: true},
+
+	// AWS SDK - DynamoDB
+	{Package: "@aws-sdk/client-dynamodb", Function: "DynamoDBClient", Kind: "db_connection", TargetType: "database", Confidence: 0.85, ArgIndex: -1, IsConstructor: true},
+
+	// GraphQL
+	{Package: "apollo-server", Function: "ApolloServer", Kind: "http_server", TargetType: "service", Confidence: 0.9, ArgIndex: -1, IsConstructor: true},
+	{Package: "@apollo/server", Function: "ApolloServer", Kind: "http_server", TargetType: "service", Confidence: 0.9, ArgIndex: -1, IsConstructor: true},
 }
 
 // Import regexes for ESM and CommonJS module systems.
@@ -99,6 +131,13 @@ var (
 
 	// CJS destructured: const { Pool } = require('pg')
 	cjsDestructuredRe = regexp.MustCompile(`^\s*(?:const|let|var)\s+\{([^}]+)\}\s*=\s*require\s*\(\s*['"]([^'"]+)['"]\s*\)`)
+
+	// Dynamic import: const module = await import('package')
+	// Also: import('package').then(...)
+	dynamicImportRe = regexp.MustCompile(`(?:await\s+)?import\s*\(\s*['"]([^'"]+)['"]\s*\)`)
+
+	// Dynamic import destructured: const { Pool } = await import('pg')
+	dynamicImportDestructuredRe = regexp.MustCompile(`(?:const|let|var)\s+\{([^}]+)\}\s*=\s*(?:await\s+)?import\s*\(\s*['"]([^'"]+)['"]\s*\)`)
 )
 
 // packageMethodCallRe matches package.method(...) calls.

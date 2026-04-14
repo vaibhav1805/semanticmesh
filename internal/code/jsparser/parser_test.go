@@ -541,3 +541,163 @@ function init() {}
 		}
 	}
 }
+
+// New tests for Phase 1 enhancements
+
+func TestDynamicImport(t *testing.T) {
+	src := `
+async function loadDB() {
+	const { Pool } = await import('pg');
+	const pool = new Pool({ host: 'db-01', port: 5432 });
+	return pool;
+}
+`
+	p := NewJSParser()
+	signals, err := p.ParseFile("dynamic.ts", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(signals) != 1 {
+		t.Fatalf("expected 1 signal from dynamic import, got %d: %+v", len(signals), signals)
+	}
+
+	sig := signals[0]
+	if sig.DetectionKind != "db_connection" {
+		t.Errorf("expected detection_kind db_connection, got %s", sig.DetectionKind)
+	}
+	if sig.TargetType != "database" {
+		t.Errorf("expected target_type database, got %s", sig.TargetType)
+	}
+}
+
+func TestExpressFramework(t *testing.T) {
+	src := `
+import express from 'express';
+
+const app = express();
+const router = express.Router();
+
+router.get('/api/users', (req, res) => {
+	res.json([]);
+});
+`
+	p := NewJSParser()
+	signals, err := p.ParseFile("express_app.ts", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(signals) != 1 {
+		t.Fatalf("expected 1 signal from Express framework, got %d: %+v", len(signals), signals)
+	}
+
+	sig := signals[0]
+	if sig.DetectionKind != "http_server" {
+		t.Errorf("expected detection_kind http_server, got %s", sig.DetectionKind)
+	}
+	if sig.TargetType != "service" {
+		t.Errorf("expected target_type service, got %s", sig.TargetType)
+	}
+}
+
+func TestTypeORMDataSource(t *testing.T) {
+	src := `
+import { DataSource } from 'typeorm';
+
+const AppDataSource = new DataSource({
+	type: 'postgres',
+	host: 'db-primary',
+	port: 5432,
+	database: 'myapp'
+});
+`
+	p := NewJSParser()
+	signals, err := p.ParseFile("typeorm_config.ts", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(signals) != 1 {
+		t.Fatalf("expected 1 signal from TypeORM, got %d: %+v", len(signals), signals)
+	}
+
+	sig := signals[0]
+	if sig.DetectionKind != "db_connection" {
+		t.Errorf("expected detection_kind db_connection, got %s", sig.DetectionKind)
+	}
+	if sig.TargetType != "database" {
+		t.Errorf("expected target_type database, got %s", sig.TargetType)
+	}
+}
+
+func TestApolloServer(t *testing.T) {
+	src := `
+import { ApolloServer } from '@apollo/server';
+
+const server = new ApolloServer({
+	typeDefs,
+	resolvers,
+});
+`
+	p := NewJSParser()
+	signals, err := p.ParseFile("graphql_server.ts", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(signals) != 1 {
+		t.Fatalf("expected 1 signal from Apollo Server, got %d: %+v", len(signals), signals)
+	}
+
+	sig := signals[0]
+	if sig.DetectionKind != "http_server" {
+		t.Errorf("expected detection_kind http_server, got %s", sig.DetectionKind)
+	}
+	if sig.TargetType != "service" {
+		t.Errorf("expected target_type service, got %s", sig.TargetType)
+	}
+}
+
+func TestAWSSDKClients(t *testing.T) {
+	src := `
+import { S3Client } from '@aws-sdk/client-s3';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+
+const s3 = new S3Client({ region: 'us-east-1' });
+const dynamo = new DynamoDBClient({ region: 'us-west-2' });
+`
+	p := NewJSParser()
+	signals, err := p.ParseFile("aws_clients.ts", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(signals) != 2 {
+		t.Fatalf("expected 2 signals from AWS SDKs, got %d: %+v", len(signals), signals)
+	}
+
+	// Check for S3 storage client
+	found := false
+	for _, sig := range signals {
+		if sig.DetectionKind == "storage_client" && sig.TargetType == "storage" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find S3 storage_client signal")
+	}
+
+	// Check for DynamoDB database client
+	found = false
+	for _, sig := range signals {
+		if sig.DetectionKind == "db_connection" && sig.TargetType == "database" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find DynamoDB db_connection signal")
+	}
+}

@@ -24,10 +24,24 @@ When enabled, semanticmesh walks the project directory, dispatches each source f
 | Language | Parser Type | File Extensions |
 |----------|-------------|-----------------|
 | Go | AST-based (go/ast) | `.go` |
-| Python | Regex-based | `.py` |
-| JavaScript/TypeScript | Regex-based | `.js`, `.ts`, `.jsx`, `.tsx` |
+| Python | Enhanced regex-based | `.py` |
+| JavaScript/TypeScript | Enhanced regex-based + optional esbuild | `.js`, `.ts`, `.jsx`, `.tsx` |
 
-The Go parser uses the standard library's `go/ast` package for precise detection. Python and JS/TS parsers use regex-based pattern matching against known library call signatures.
+The Go parser uses the standard library's `go/ast` package for precise detection. Python and JS/TS parsers use enhanced regex-based pattern matching with improved import resolution.
+
+### Import Resolution Enhancements
+
+**Python:**
+- Multi-item imports: `from redis import Redis, StrictRedis, ConnectionPool`
+- Multi-line imports: `from package import (A, B, C)`
+- Dotted package imports: `from psycopg2.pool import SimpleConnectionPool`
+- Aliased multi-item imports: `from requests import get as http_get, post as http_post`
+
+**JavaScript/TypeScript:**
+- Dynamic imports: `const { Pool } = await import('pg')`
+- ESM and CommonJS mixed in same file
+- Scoped packages: `@aws-sdk/client-s3`, `@prisma/client`
+- Optional esbuild integration for higher accuracy (auto-detects complex import patterns)
 
 ## What Each Parser Detects
 
@@ -92,6 +106,14 @@ The Python parser resolves `import X`, `import X as Y`, and `from X import Y` st
 | `kafka.KafkaConsumer` | queue_consumer | message-broker | 0.85 |
 | `pika.BlockingConnection` | queue_producer | message-broker | 0.85 |
 | `boto3.client("sqs")` | queue_producer | queue | 0.85 |
+| `flask.Flask`, `@app.route` decorators | http_server | service | 0.9 |
+| `fastapi.FastAPI`, `@app.get/@app.post` decorators | http_server | service | 0.85-0.9 |
+| `psycopg2.pool.SimpleConnectionPool`, `ThreadedConnectionPool` | db_connection | database | 0.85 |
+| `redis.ConnectionPool` | cache_client | cache | 0.85 |
+| `sqlalchemy.sessionmaker`, `sqlalchemy.orm.Session` | db_connection | database | 0.85 |
+| `boto3.resource("dynamodb")` | db_connection | database | 0.85 |
+| `elasticsearch.Elasticsearch` | search_client | search | 0.85 |
+| `celery.Celery` | queue_producer | message-broker | 0.85 |
 
 **Example:**
 
@@ -127,6 +149,16 @@ The JS parser resolves ESM imports (`import X from 'pkg'`, `import { X } from 'p
 | `new Kafka()` (kafkajs) | queue_producer | message-broker | 0.85 |
 | `amqplib.connect` | queue_producer | message-broker | 0.85 |
 | `new SQSClient()` (@aws-sdk/client-sqs) | queue_producer | queue | 0.85 |
+| `express.Router` | http_server | service | 0.9 |
+| `fastify()` | http_server | service | 0.9 |
+| `new Koa()` (koa) | http_server | service | 0.9 |
+| `typeorm.createConnection`, `new DataSource()` | db_connection | database | 0.85 |
+| `knex.knex()` | db_connection | database | 0.85 |
+| `new NodeCache()` (node-cache) | cache_client | cache | 0.85 |
+| `new Client()` (@elastic/elasticsearch) | search_client | search | 0.85 |
+| `new S3Client()` (@aws-sdk/client-s3) | storage_client | storage | 0.85 |
+| `new DynamoDBClient()` (@aws-sdk/client-dynamodb) | db_connection | database | 0.85 |
+| `new ApolloServer()` (apollo-server, @apollo/server) | http_server | service | 0.9 |
 
 **Example:**
 

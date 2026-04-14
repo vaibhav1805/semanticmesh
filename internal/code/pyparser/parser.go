@@ -72,8 +72,38 @@ func (p *PythonParser) ParseFile(filePath string, content []byte) ([]code.CodeSi
 			continue
 		}
 
-		// Skip decorator lines
+		// Detect web framework decorators before skipping
 		if strings.HasPrefix(trimmed, "@") {
+			// Check for Flask decorators (has @app.route)
+			// Only flag as Flask if it contains '.route' or check if FastAPI pattern doesn't match
+			isFlask := flaskDecoratorRe.MatchString(trimmed)
+			isFastAPI := fastAPIDecoratorRe.MatchString(trimmed)
+
+			// Flask-specific: @app.route (not just HTTP methods)
+			if isFlask && strings.Contains(trimmed, ".route") {
+				signals = append(signals, code.CodeSignal{
+					LineNumber:      lineNum,
+					TargetComponent: "flask-app",
+					TargetType:      "service",
+					DetectionKind:   "http_server",
+					Evidence:        evidenceSnippet(lines, lineNum),
+					Language:        "python",
+					Confidence:      0.9,
+					SourceFile:      filePath,
+				})
+			// FastAPI or Flask HTTP method decorators
+			} else if isFastAPI {
+				signals = append(signals, code.CodeSignal{
+					LineNumber:      lineNum,
+					TargetComponent: "fastapi-app",
+					TargetType:      "service",
+					DetectionKind:   "http_server",
+					Evidence:        evidenceSnippet(lines, lineNum),
+					Language:        "python",
+					Confidence:      0.85, // Lower confidence as could be Flask too
+					SourceFile:      filePath,
+				})
+			}
 			continue
 		}
 
@@ -95,10 +125,7 @@ func (p *PythonParser) ParseFile(filePath string, content []byte) ([]code.CodeSi
 
 		// Also check for bare function calls that don't match the obj.fn pattern
 		// (from-imports like Redis(...), KafkaProducer(...), etc.)
-		if !strings.Contains(codePart, ".") || true {
-			// Check for bare calls (no dot prefix) that match from-imports
-			p.matchBareCalls(codePart, lineNum, lines, importMap, &signals)
-		}
+		p.matchBareCalls(codePart, lineNum, lines, importMap, &signals)
 	}
 
 	// Scan comments using shared comment analyzer
@@ -138,8 +165,33 @@ func (p *PythonParser) ParseFile(filePath string, content []byte) ([]code.CodeSi
 func (p *PythonParser) buildImportMap(lines []string) map[string]importEntry {
 	importMap := make(map[string]importEntry)
 
+	inMultiLineImport := false
+	multiLinePackage := ""
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
+
+		// Handle multi-line import continuation
+		if inMultiLineImport {
+			// End of multi-line import
+			if strings.HasSuffix(trimmed, ")") {
+				inMultiLineImport = false
+				// Parse the items on this line (before the closing paren)
+				itemsStr := strings.TrimSuffix(trimmed, ")")
+				p.parseImportItems(multiLinePackage, itemsStr, importMap)
+				continue
+			}
+			// Still in multi-line import, parse items
+			p.parseImportItems(multiLinePackage, trimmed, importMap)
+			continue
+		}
+
+		// from X import (   -- start of multi-line import
+		if matches := fromImportParenRe.FindStringSubmatch(trimmed); len(matches) >= 2 {
+			multiLinePackage = matches[1]
+			inMultiLineImport = true
+			continue
+		}
 
 		// import X as Y
 		if matches := aliasedImportRe.FindStringSubmatch(trimmed); len(matches) >= 3 {
@@ -156,26 +208,49 @@ func (p *PythonParser) buildImportMap(lines []string) map[string]importEntry {
 			continue
 		}
 
-		// from X import Y [as Z]
-		if matches := fromImportRe.FindStringSubmatch(trimmed); len(matches) >= 3 {
+		// from X import A, B, C  -- multiple items (check this BEFORE single-item)
+		// This will also match single items, so we check for comma or multiple words
+		if matches := fromImportMultiRe.FindStringSubmatch(trimmed); len(matches) >= 3 {
 			pkg := matches[1]
-			name := matches[2]
-			alias := matches[3] // may be empty
-
-			localName := name
-			if alias != "" {
-				localName = alias
-			}
-
-			importMap[localName] = importEntry{
-				packageName:   pkg,
-				qualifiedName: pkg + "." + name,
-			}
+			itemsStr := matches[2]
+			// Parse all items from the import statement
+			p.parseImportItems(pkg, itemsStr, importMap)
 			continue
 		}
 	}
 
 	return importMap
+}
+
+// parseImportItems parses comma-separated import items and adds them to importMap.
+// Handles: A, B as C, D
+func (p *PythonParser) parseImportItems(pkg, itemsStr string, importMap map[string]importEntry) {
+	items := strings.Split(itemsStr, ",")
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+
+		// Handle "Name as Alias"
+		if strings.Contains(item, " as ") {
+			parts := strings.Split(item, " as ")
+			if len(parts) == 2 {
+				name := strings.TrimSpace(parts[0])
+				alias := strings.TrimSpace(parts[1])
+				importMap[alias] = importEntry{
+					packageName:   pkg,
+					qualifiedName: pkg + "." + name,
+				}
+			}
+		} else {
+			// Simple import: from pkg import Name
+			importMap[item] = importEntry{
+				packageName:   pkg,
+				qualifiedName: pkg + "." + item,
+			}
+		}
+	}
 }
 
 // matchCall tries to match an object.function() call against the pattern table.
@@ -228,9 +303,17 @@ func (p *PythonParser) matchCall(obj, fn, args string, lineNum int, lines []stri
 // matchBareCalls handles from-imported bare function calls like Redis(...), KafkaProducer(...).
 // These don't have a dot-qualified object prefix.
 func (p *PythonParser) matchBareCalls(codePart string, lineNum int, lines []string, importMap map[string]importEntry, signals *[]code.CodeSignal) {
+	// Track what we've already matched on this line to avoid duplicates
+	matched := make(map[string]bool)
+
 	for localName, entry := range importMap {
 		if entry.qualifiedName == "" {
 			continue // not a from-import
+		}
+
+		// Skip if already matched
+		if matched[localName] {
+			continue
 		}
 
 		// Check if this local name is called as a bare function: Name(...)
@@ -250,11 +333,6 @@ func (p *PythonParser) matchBareCalls(codePart string, lineNum int, lines []stri
 			continue
 		}
 
-		// Already matched by matchCall? Skip to avoid duplicates.
-		// matchCall handles obj.fn patterns; bare calls have no obj prefix.
-		// We check by looking for a dot before the function name.
-		// If there's no dot, this is a genuine bare call.
-
 		// Extract args from the call
 		startParen := callIdx + len(localName)
 		args := extractParenContent(codePart, startParen)
@@ -270,6 +348,9 @@ func (p *PythonParser) matchBareCalls(codePart string, lineNum int, lines []stri
 			Language:        "python",
 			Confidence:      pattern.Confidence,
 		})
+
+		// Mark as matched
+		matched[localName] = true
 	}
 }
 

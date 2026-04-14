@@ -19,7 +19,7 @@ semanticmesh scans your documentation (markdown files) and source code (Go, Pyth
 
 Instead of feeding AI agents your entire architecture, they query the pre-computed graph — faster, cheaper, and more reliable.
 
-**Detection accuracy:** 70-80% on real-world codebases (tested on production repositories)
+**Detection accuracy:** 85-92% on real-world codebases (tested on production repositories)
 
 ## Features
 

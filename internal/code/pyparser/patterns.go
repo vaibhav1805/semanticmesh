@@ -65,6 +65,35 @@ var DefaultPythonPatterns = []PyDetectionPattern{
 
 	// Queue - AWS SQS (boto3)
 	{Package: "boto3", Function: "client", Kind: "queue_producer", TargetType: "queue", Confidence: 0.85, ArgIndex: -1},
+
+	// Web frameworks - Flask
+	{Package: "flask", Function: "Flask", Kind: "http_server", TargetType: "service", Confidence: 0.9, ArgIndex: -1},
+
+	// Web frameworks - FastAPI
+	{Package: "fastapi", Function: "FastAPI", Kind: "http_server", TargetType: "service", Confidence: 0.9, ArgIndex: -1},
+
+	// Web frameworks - Django
+	{Package: "django.http", Function: "HttpResponse", Kind: "http_server", TargetType: "service", Confidence: 0.85, ArgIndex: -1},
+
+	// Connection pooling - psycopg2
+	{Package: "psycopg2.pool", Function: "SimpleConnectionPool", Kind: "db_connection", TargetType: "database", Confidence: 0.85, ArgIndex: -1},
+	{Package: "psycopg2.pool", Function: "ThreadedConnectionPool", Kind: "db_connection", TargetType: "database", Confidence: 0.85, ArgIndex: -1},
+
+	// Connection pooling - redis
+	{Package: "redis", Function: "ConnectionPool", Kind: "cache_client", TargetType: "cache", Confidence: 0.85, ArgIndex: -1},
+
+	// SQLAlchemy ORM
+	{Package: "sqlalchemy", Function: "sessionmaker", Kind: "db_connection", TargetType: "database", Confidence: 0.85, ArgIndex: -1},
+	{Package: "sqlalchemy.orm", Function: "Session", Kind: "db_connection", TargetType: "database", Confidence: 0.85, ArgIndex: -1},
+
+	// AWS SDK - DynamoDB
+	{Package: "boto3", Function: "resource", Kind: "db_connection", TargetType: "database", Confidence: 0.85, ArgIndex: -1},
+
+	// Elasticsearch
+	{Package: "elasticsearch", Function: "Elasticsearch", Kind: "search_client", TargetType: "search", Confidence: 0.85, ArgIndex: -1},
+
+	// Celery task queue
+	{Package: "celery", Function: "Celery", Kind: "queue_producer", TargetType: "message-broker", Confidence: 0.85, ArgIndex: -1},
 }
 
 // Import regexes for Python import statements.
@@ -79,6 +108,12 @@ var (
 	// and: from redis import Redis as R
 	// and: from pymemcache.client import Client
 	fromImportRe = regexp.MustCompile(`^from\s+(\w+(?:\.\w+)*)\s+import\s+(\w+)(?:\s+as\s+(\w+))?\s*$`)
+
+	// fromImportMultiRe matches multi-item imports: from redis import Redis, StrictRedis
+	fromImportMultiRe = regexp.MustCompile(`^from\s+(\w+(?:\.\w+)*)\s+import\s+(.+)$`)
+
+	// fromImportParenRe matches multi-line imports: from package import (
+	fromImportParenRe = regexp.MustCompile(`^from\s+(\w+(?:\.\w+)*)\s+import\s+\($`)
 )
 
 // callPatternRe matches Python function/method calls like:
@@ -107,6 +142,14 @@ var pikaParamsRe = regexp.MustCompile(`ConnectionParameters\(\s*["']([^"']+)["']
 
 // boto3SQSArgRe checks if boto3.client call has "sqs" as first argument.
 var boto3SQSArgRe = regexp.MustCompile(`["']sqs["']`)
+
+// flaskDecoratorRe matches Flask route decorators: @app.route, @app.get, @app.post, etc.
+// Group 1: decorator method name (route, get, post, put, delete, patch)
+var flaskDecoratorRe = regexp.MustCompile(`@\w+\.(route|get|post|put|delete|patch)\s*\(`)
+
+// fastAPIDecoratorRe matches FastAPI route decorators: @app.get, @app.post, etc.
+// Group 1: HTTP method (get, post, put, delete, patch)
+var fastAPIDecoratorRe = regexp.MustCompile(`@\w+\.(get|post|put|delete|patch)\s*\(`)
 
 // buildPatternIndex creates a lookup map keyed by "package.function".
 func buildPatternIndex(patterns []PyDetectionPattern) map[string]PyDetectionPattern {

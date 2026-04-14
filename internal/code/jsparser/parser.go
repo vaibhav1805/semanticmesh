@@ -342,6 +342,23 @@ func buildJSImportMap(lines []string) map[string]string {
 			m[localName] = pkg
 			continue
 		}
+
+		// Dynamic import destructured: const { Pool } = await import('pg')
+		if matches := dynamicImportDestructuredRe.FindStringSubmatch(trimmed); matches != nil {
+			names := matches[1]
+			pkg := matches[2]
+			for _, name := range strings.Split(names, ",") {
+				name = strings.TrimSpace(name)
+				// Handle "as" aliases
+				if idx := strings.Index(name, " as "); idx >= 0 {
+					alias := strings.TrimSpace(name[idx+4:])
+					m[alias] = pkg
+				} else if name != "" {
+					m[name] = pkg
+				}
+			}
+			continue
+		}
 	}
 
 	return m
@@ -353,6 +370,9 @@ func isImportLine(trimmed string) bool {
 		return true
 	}
 	if cjsDefaultRe.MatchString(trimmed) || cjsDestructuredRe.MatchString(trimmed) {
+		return true
+	}
+	if dynamicImportDestructuredRe.MatchString(trimmed) {
 		return true
 	}
 	return false

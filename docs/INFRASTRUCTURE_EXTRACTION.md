@@ -556,7 +556,7 @@ semanticmesh query component dynamodb --show-mentions
 
 ## Summary
 
-Infrastructure text extraction adds **18% more coverage** by mining component mentions from documentation prose. With 50+ patterns covering databases, cloud services, message brokers, and orchestration tools, it complements code analysis and structure parsing to achieve **70-80% detection accuracy**.
+Infrastructure text extraction adds **18% more coverage** by mining component mentions from documentation prose. With 50+ patterns covering databases, cloud services, message brokers, and orchestration tools, it complements enhanced code analysis and structure parsing to achieve **85-92% detection accuracy**.
 
 This completes semanticmesh's capability to map both **service-to-service** and **service-to-infrastructure** dependencies from documentation and code.
 

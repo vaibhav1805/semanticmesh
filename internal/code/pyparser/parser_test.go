@@ -436,8 +436,20 @@ def handler():
 		t.Fatal(err)
 	}
 
-	if len(signals) != 0 {
-		t.Fatalf("expected 0 signals for decorator lines, got %d: %v", len(signals), signals)
+	// Now we expect 1 signal from Flask decorator detection
+	if len(signals) != 1 {
+		t.Fatalf("expected 1 signal from Flask decorator, got %d: %v", len(signals), signals)
+	}
+
+	sig := signals[0]
+	if sig.DetectionKind != "http_server" {
+		t.Errorf("expected detection_kind http_server, got %s", sig.DetectionKind)
+	}
+	if sig.TargetType != "service" {
+		t.Errorf("expected target_type service, got %s", sig.TargetType)
+	}
+	if sig.TargetComponent != "flask-app" {
+		t.Errorf("expected target_component flask-app, got %s", sig.TargetComponent)
 	}
 }
 
@@ -557,5 +569,252 @@ resp = requests.get("http://line-test:8080/api")
 	}
 	if signals[0].LineNumber != 5 {
 		t.Errorf("expected line 5, got %d", signals[0].LineNumber)
+	}
+}
+
+// New tests for Phase 1 enhancements
+
+func TestFlaskDecorator(t *testing.T) {
+	src := `
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/api/users")
+def get_users():
+    pass
+
+@app.post("/api/users")
+def create_user():
+    pass
+`
+	p := NewPythonParser()
+	signals, err := p.ParseFile("flask_app.py", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should detect Flask class instantiation + 2 route decorators + 1 FastAPI false positive
+	// We'll count only Flask-specific signals (with .route)
+	flaskSignals := 0
+	for _, sig := range signals {
+		if sig.TargetComponent == "flask-app" || sig.TargetComponent == "flask" {
+			flaskSignals++
+		}
+		if sig.DetectionKind != "http_server" {
+			t.Errorf("expected detection_kind http_server, got %s", sig.DetectionKind)
+		}
+		if sig.TargetType != "service" {
+			t.Errorf("expected target_type service, got %s", sig.TargetType)
+		}
+	}
+
+	// Should have at least 2 Flask-related signals (route decorator + optional class instantiation)
+	if flaskSignals < 2 {
+		t.Errorf("expected at least 2 Flask signals, got %d: %v", flaskSignals, signals)
+	}
+}
+
+func TestFastAPIDecorator(t *testing.T) {
+	src := `
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/api/items")
+async def read_items():
+    pass
+
+@app.post("/api/items")
+async def create_item():
+    pass
+`
+	p := NewPythonParser()
+	signals, err := p.ParseFile("fastapi_app.py", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should detect FastAPI class instantiation + decorators
+	// Count signals related to http_server
+	httpServerSignals := 0
+	for _, sig := range signals {
+		if sig.DetectionKind == "http_server" {
+			httpServerSignals++
+		}
+		if sig.TargetType != "service" {
+			t.Errorf("expected target_type service, got %s", sig.TargetType)
+		}
+	}
+
+	// Should have at least 3 signals (1 FastAPI class + 2 decorators)
+	if httpServerSignals < 3 {
+		t.Errorf("expected at least 3 http_server signals, got %d: %v", httpServerSignals, signals)
+	}
+}
+
+func TestConnectionPooling(t *testing.T) {
+	src := `
+from psycopg2.pool import SimpleConnectionPool
+import redis
+
+pool = SimpleConnectionPool(1, 20, "postgresql://db:5432/app")
+redis_pool = redis.ConnectionPool(host="cache-01", port=6379)
+`
+	p := NewPythonParser()
+	signals, err := p.ParseFile("pooling.py", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(signals) != 2 {
+		t.Fatalf("expected 2 signals for connection pools, got %d: %v", len(signals), signals)
+	}
+
+	// Check psycopg2 pool
+	assertSignal(t, signals, "db_connection", "db")
+	// Check redis pool
+	assertSignal(t, signals, "cache_client", "cache-01")
+}
+
+func TestSQLAlchemySessionmaker(t *testing.T) {
+	src := `
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+engine = create_engine("postgresql://db:5432/app")
+Session = sessionmaker(bind=engine)
+`
+	p := NewPythonParser()
+	signals, err := p.ParseFile("sqlalchemy_app.py", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should detect at least create_engine
+	// sessionmaker detection is trickier (bare call after from-import)
+	if len(signals) < 1 {
+		t.Fatalf("expected at least 1 signal for SQLAlchemy, got %d: %v", len(signals), signals)
+	}
+
+	assertSignal(t, signals, "db_connection", "db")
+}
+
+// Phase 2 tests: Enhanced import resolution
+
+func TestMultiItemFromImport(t *testing.T) {
+	src := `
+from redis import Redis, ConnectionPool
+
+r1 = Redis(host="cache-01")
+pool = ConnectionPool(host="cache-03")
+`
+	p := NewPythonParser()
+	signals, err := p.ParseFile("multi_import.py", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should detect both Redis connections
+	if len(signals) != 2 {
+		t.Fatalf("expected 2 signals from multi-item import, got %d: %v", len(signals), signals)
+	}
+
+	cacheCount := 0
+	for _, sig := range signals {
+		if sig.DetectionKind == "cache_client" && sig.TargetType == "cache" {
+			cacheCount++
+		}
+	}
+	if cacheCount != 2 {
+		t.Errorf("expected 2 cache_client signals, got %d", cacheCount)
+	}
+}
+
+func TestMultiLineImport(t *testing.T) {
+	src := `
+from kafka import (
+    KafkaProducer,
+    KafkaConsumer
+)
+
+producer = KafkaProducer(bootstrap_servers="broker:9092")
+consumer = KafkaConsumer(bootstrap_servers="broker:9092")
+`
+	p := NewPythonParser()
+	signals, err := p.ParseFile("multiline_import.py", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should detect both Kafka producer and consumer
+	if len(signals) != 2 {
+		t.Fatalf("expected 2 signals from multi-line import, got %d: %v", len(signals), signals)
+	}
+
+	queueCount := 0
+	for _, sig := range signals {
+		if sig.TargetType == "message-broker" {
+			queueCount++
+		}
+	}
+	if queueCount != 2 {
+		t.Errorf("expected 2 message-broker signals, got %d", queueCount)
+	}
+}
+
+func TestDottedPackageImport(t *testing.T) {
+	src := `
+from psycopg2.pool import SimpleConnectionPool, ThreadedConnectionPool
+
+simple_pool = SimpleConnectionPool(1, 10, "postgresql://db:5432/app")
+threaded_pool = ThreadedConnectionPool(1, 20, "postgresql://db2:5432/app")
+`
+	p := NewPythonParser()
+	signals, err := p.ParseFile("dotted_import.py", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should detect both connection pools
+	if len(signals) != 2 {
+		t.Fatalf("expected 2 signals from dotted package import, got %d: %v", len(signals), signals)
+	}
+
+	for _, sig := range signals {
+		if sig.DetectionKind != "db_connection" {
+			t.Errorf("expected detection_kind db_connection, got %s", sig.DetectionKind)
+		}
+		if sig.TargetType != "database" {
+			t.Errorf("expected target_type database, got %s", sig.TargetType)
+		}
+	}
+}
+
+func TestAliasedMultiItemImport(t *testing.T) {
+	src := `
+from requests import get as http_get, post as http_post
+
+resp1 = http_get("http://api-01:8080/health")
+resp2 = http_post("http://api-02:8080/data")
+`
+	p := NewPythonParser()
+	signals, err := p.ParseFile("aliased_multi.py", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should detect both HTTP calls with aliased imports
+	if len(signals) != 2 {
+		t.Fatalf("expected 2 signals from aliased multi-item import, got %d: %v", len(signals), signals)
+	}
+
+	for _, sig := range signals {
+		if sig.DetectionKind != "http_call" {
+			t.Errorf("expected detection_kind http_call, got %s", sig.DetectionKind)
+		}
+		if sig.TargetType != "service" {
+			t.Errorf("expected target_type service, got %s", sig.TargetType)
+		}
 	}
 }
