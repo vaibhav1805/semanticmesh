@@ -25,6 +25,7 @@ Each stage contributes **signals** that are merged, deduplicated, and scored to 
 │  - Go code                  │
 │  - Python code              │
 │  - JS code                  │
+│  - Mendix apps (.mpr)       │
 └────────┬────────────────────┘
          │
          ▼
@@ -38,6 +39,7 @@ Each stage contributes **signals** that are merged, deduplicated, and scored to 
 ├─────────────────────────────────────────────────────┤
 │  Stage 2: Code Analysis (AST Parsing)               │
 │    → Parse Go/Python/JS files                       │
+│    → Analyze Mendix apps via mxcli catalog          │
 │    → Detect connection strings, SDK calls           │
 │    → Extract framework usage (Gin, Echo, K8s, etc.) │
 ├─────────────────────────────────────────────────────┤

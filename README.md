@@ -23,12 +23,17 @@ Instead of feeding AI agents your entire architecture, they query the pre-comput
 
 ## Features
 
+- **Configurable extraction profiles:** Mendix analysis supports Minimal (fast scans), Standard (recommended), and Comprehensive (deep analysis) profiles
+- **Component type classification:** 15 core types with confidence scores (0.4-1.0)
+- **Multi-source corroboration:** Relationships detected by both docs and code get higher confidence
+- **Provenance tracking:** Every detection includes where and how it was found
+
 ### Three-Stage Detection Pipeline
 
 semanticmesh merges signals from three sources into a single hybrid dependency graph:
 
 - **Markdown analysis:** Extracts components and relationships from documentation (services, APIs, dependencies)
-- **Code analysis:** Detects database connections, service URLs, message queue bindings, and cache clients from Go, Python, and JavaScript source code (55+ Go patterns including Gin, Echo, Kubernetes, pgx, Kafka, Datadog)
+- **Code analysis:** Detects database connections, service URLs, message queue bindings, and cache clients from Go, Python, JavaScript, and Mendix applications (55+ Go patterns including Gin, Echo, Kubernetes, pgx, Kafka, Datadog; Mendix comprehensive extraction with configurable profiles—14+ tables, 700+ items in ~2s)
 - **Infrastructure text extraction:** Mines component mentions from documentation prose using 50+ regex patterns (databases, cloud services, message brokers, authentication systems)
 
 When both documentation and code corroborate a relationship, the edge is tagged `source_type: both`, giving higher confidence.
@@ -236,7 +241,7 @@ Agents can call `query_impact`, `query_dependencies`, `query_path`, `list_compon
 
 - **[docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md)** — Full command reference for all semanticmesh commands with examples and JSON output formats
 - **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** — Guide to `.semanticmeshignore`, `semanticmesh-aliases.yaml`, seed configuration, and named graph management
-- **[docs/CODE_ANALYSIS.md](docs/CODE_ANALYSIS.md)** — Code parser patterns for Go, Python, and JavaScript
+- **[docs/CODE_ANALYSIS.md](docs/CODE_ANALYSIS.md)** — Code parser patterns for Go, Python, JavaScript, and Mendix
 - **[docs/QUERY_REFERENCE.md](docs/QUERY_REFERENCE.md)** — SQL query examples and advanced graph queries
 - **[docs/SCHEMA.md](docs/SCHEMA.md)** — Database schema reference
 
@@ -356,7 +361,20 @@ import (
 ```
 **Result:** Detects HTTP server (Gin), database client (pgx), monitoring (Datadog)
 
-**Coverage:** 55+ patterns for Go, similar pattern matching for Python and JavaScript
+**Coverage:** 55+ patterns for Go, similar pattern matching for Python and JavaScript, comprehensive catalog-based analysis for Mendix applications
+
+**Example (Mendix application):**
+```
+Typical Mendix app (Standard profile, ~2-3s):
+- 20-30 modules
+- Multiple published REST APIs
+- 100-200 entities (Customer, Order, Invoice, etc.)
+- 200-300 microflows (ACT_ProcessOrder, ACT_ValidateCustomer, etc.)
+- 100-200 Java actions (ExportToExcel, SendEmail, etc.)
+- 100+ pages (Login, Dashboard, CustomerDetail, etc.)
+- Dozens of constants (API_Timeout, MaxRetries, etc.)
+```
+**Result:** Detects Mendix app (service), published APIs (rest-api), entities (entity), microflows (microflow), pages (page), configuration (constant)
 
 ---
 

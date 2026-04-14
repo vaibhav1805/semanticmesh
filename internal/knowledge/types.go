@@ -171,7 +171,8 @@ var componentTypePatterns = map[ComponentType][]string{
 		"service", "api", "server", "worker", "backend", "microservice",
 		"app", "application", "rest api", "http endpoint", "graphql",
 		"grpc service", "web service", "endpoint", "controller",
-		"manager", "operator",
+		"manager", "operator", "mendix", "mpr", "microflow", "nanoflow",
+		"mendix app", "mendix-app",
 	},
 	ComponentTypeDatabase: {
 		"database", "db", "postgres", "postgresql", "mysql", "mariadb",

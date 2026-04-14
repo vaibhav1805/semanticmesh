@@ -284,6 +284,288 @@ semanticmesh import updated-graph.zip --name prod-infra
 
 ---
 
+## Mendix Analysis Configuration
+
+The `semanticmesh.yaml` file controls Mendix-specific analysis settings when using the `--analyze-code` flag. Mendix extraction uses configurable profiles to balance speed and depth: Minimal (fast CI/CD scans), Standard (recommended for analysis), or Comprehensive (deep investigation).
+
+Place `semanticmesh.yaml` in the root of your workspace or Mendix project directory.
+
+**Note:** semanticmesh uses the mxcli Go library bundled as a module dependency—no external binary installation required.
+
+### File Format
+
+```yaml
+# semanticmesh.yaml
+code_analysis:
+  mendix:
+    extraction_profile: "standard"  # minimal, standard, or comprehensive
+    extract_published_apis: true
+    extract_domain_model: true
+    extract_business_logic: true
+    extract_ui_structure: true
+    extract_configuration: true
+    include_internal_deps: false
+    detect_modules_as_components: false
+```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `extraction_profile` | string | `"standard"` | Profile: `minimal`, `standard`, or `comprehensive` |
+| `extract_published_apis` | bool | `true` | Extract REST/OData APIs this app exposes |
+| `extract_domain_model` | bool | `true` | Extract entities and attributes |
+| `extract_business_logic` | bool | `true` | Extract microflows and Java actions |
+| `extract_ui_structure` | bool | `true` | Extract pages and navigation |
+| `extract_configuration` | bool | `true` | Extract constants and settings |
+| `include_internal_deps` | bool | `false` | Include module and microflow dependencies |
+| `detect_modules_as_components` | bool | `false` | Create component for each module |
+| ~~`enabled`~~ | boolean | `true` | **Legacy:** Use `code_analysis.enabled` instead |
+| ~~`catalog_refresh`~~ | boolean | `true` | **Legacy:** Always enabled in new profiles |
+| ~~`mxcli_path`~~ | string | N/A | **Deprecated:** mxcli is now a Go module dependency |
+
+### Profile Presets
+
+#### Minimal Profile (~1.6s)
+
+Extracts only Tier 1: external dependencies and published APIs.
+
+**What gets extracted:**
+- Modules (20-30 in typical apps)
+- Published REST services (multiple per app)
+- Published REST operations
+- Entities (100-200 in typical apps)
+
+**Tables:** `modules`, `published_rest_services`, `published_rest_operations`, `entities`
+
+**Use for:**
+- CI/CD pipelines requiring fast scans
+- Quick dependency checks ("what does this app depend on?")
+- Initial architecture discovery
+- High-frequency automated scans
+
+**Performance:** ~1-2 seconds for 150-200 items
+
+#### Standard Profile (~2.3s, default)
+
+Extracts Tier 1 + Tier 2: business logic and UI structure.
+
+**What gets extracted:**
+- All Minimal profile items
+- Microflows (200-500 in typical apps)
+- Java Actions (100-200 in typical apps)
+- Pages (100+ in typical apps)
+- Constants (dozens to hundreds)
+
+**Tables:** All Minimal tables + `microflows`, `java_actions`, `pages`, `constants`
+
+**Use for:**
+- Impact analysis ("if X fails, what breaks?")
+- Architecture documentation
+- Service dependency mapping
+- Change impact assessment
+- Most day-to-day analysis tasks
+
+**Performance:** ~2-3 seconds for 500-1000 items
+
+#### Comprehensive Profile (~1.5s)
+
+Extracts all tiers + internal dependencies (module-to-module, microflow calls).
+
+**What gets extracted:**
+- All Standard profile items
+- Module dependencies (cross-module references)
+- Microflow call graphs (caller/callee relationships)
+
+**Tables:** All Standard tables + `module_dependencies`, `microflow_calls`
+
+**Use for:**
+- Complete architectural analysis
+- Refactoring planning (understanding module coupling)
+- Deep investigation of internal structure
+- Module boundary analysis
+- Technical debt assessment
+
+**Performance:** ~1-2 seconds for 500-1000+ items (optimized catalog queries)
+
+### Configuration Examples
+
+#### Minimal Profile - Fast CI/CD Scans
+
+```yaml
+# semanticmesh.yaml
+code_analysis:
+  mendix:
+    extraction_profile: "minimal"
+```
+
+**Result:** Extracts 150-200 items (modules, published APIs, entities) in ~1-2s
+
+**Use case:** "Does this app depend on any external services? What APIs does it expose?"
+
+#### Standard Profile - Recommended for Analysis
+
+```yaml
+# semanticmesh.yaml
+code_analysis:
+  mendix:
+    extraction_profile: "standard"
+```
+
+**Result:** Extracts 500-1000 items (modules, APIs, entities, microflows, Java actions, pages, constants) in ~2-3s
+
+**Use case:** "If the Customer entity changes, which microflows and pages are affected?"
+
+#### Comprehensive Profile - Deep Investigation
+
+```yaml
+# semanticmesh.yaml
+code_analysis:
+  mendix:
+    extraction_profile: "comprehensive"
+    include_internal_deps: true
+```
+
+**Result:** Extracts 500-1000+ items with internal dependencies in ~1-2s
+
+**Use case:** "Which modules depend on the CustomerModule? What's the call graph for ProcessOrder microflow?"
+
+#### Custom Profile - Fine-Grained Control
+
+```yaml
+# semanticmesh.yaml
+code_analysis:
+  mendix:
+    extract_published_apis: true    # Include APIs
+    extract_domain_model: true      # Include entities
+    extract_business_logic: false   # Skip microflows/Java actions
+    extract_ui_structure: false     # Skip pages
+    extract_configuration: false    # Skip constants
+```
+
+**Result:** Custom extraction (only APIs + entities)
+
+**Use case:** "I only care about the data model and API surface—skip the rest"
+
+#### Legacy Configuration (Still Supported)
+
+```yaml
+# semanticmesh.yaml (legacy format)
+mendix:
+  enabled: true
+  catalog_refresh: true
+  include_internal_deps: false
+  detect_modules_as_components: false
+```
+
+**Migration:** Use `extraction_profile: "standard"` instead for better control
+
+### Performance Impact
+
+| Profile | Time | Items | Tables | Memory | Use Case |
+|---------|------|-------|--------|--------|----------|
+| Minimal | ~1-2s | 150-200 | 4 | Low | CI/CD, quick scans |
+| Standard | ~2-3s | 500-1000 | 8 | Medium | Impact analysis, docs |
+| Comprehensive | ~1-2s | 500-1000+ | 10+ | Medium | Refactoring, deep investigation |
+
+**Example:** Typical mid-sized Mendix app (20-30 modules, 100-200 entities, 200-300 microflows, multiple REST APIs)
+
+**Note:** Comprehensive profile is faster due to optimized catalog queries—it performs fewer total queries by batch-fetching related data.
+
+### Combining with Other Configuration
+
+```yaml
+# Complete workspace configuration
+code_analysis:
+  mendix:
+    extraction_profile: "standard"
+    detect_modules_as_components: false
+  
+  enabled: true
+  skip_test_files: true
+
+ignore_patterns:
+  - "*/deployment/"
+  - "*/resources/"
+  - "*/.mendix-cache/"
+```
+
+### Mendix-Specific Aliases
+
+When analyzing Mendix apps alongside other services, use aliases to normalize component names:
+
+```yaml
+# semanticmesh-aliases.yaml
+aliases:
+  backend-service:
+    - MendixBackend
+    - Backend
+    - backend-api
+  
+  frontend-app:
+    - MendixFrontend
+    - Frontend
+    - frontend-web
+  
+  # Normalize module names (when detect_modules_as_components: true)
+  customer-module:
+    - CustomerManagement
+    - CustomerModule
+    - Customers
+```
+
+### Mendix-Specific Ignore Patterns
+
+Add Mendix-specific directories to `.semanticmeshignore`:
+
+```gitignore
+# .semanticmeshignore
+
+# Mendix deployment artifacts
+deployment/
+javasource/
+resources/
+userlib/
+.mendix-cache/
+
+# Mendix version control
+.svn/
+
+# Mendix temporary files
+*.mpr.lock
+*.mpr.bak
+```
+
+### Environment-Specific Configuration
+
+For CI/CD pipelines or different environments:
+
+```yaml
+# production.yaml
+mendix:
+  enabled: true
+  catalog_refresh: true
+  include_internal_deps: false
+
+# development.yaml
+mendix:
+  enabled: true
+  catalog_refresh: false  # Faster during development
+  include_internal_deps: true  # More detail for debugging
+```
+
+Use with:
+
+```bash
+# Production export
+semanticmesh export --input . --output prod.zip --analyze-code --config production.yaml
+
+# Development export
+semanticmesh export --input . --output dev.zip --analyze-code --config development.yaml
+```
+
+---
+
 ## Best Practices
 
 ### 1. Start with Auto-Detection

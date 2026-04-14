@@ -38,7 +38,7 @@ semanticmesh export [FLAGS]
 |------|------|---------|-------------|
 | `--input PATH` | string | `.` | Source directory to scan. Alias: `--from`. |
 | `--output FILE` | string | `graph.zip` | Output ZIP file path. `.zip` extension added automatically if missing. |
-| `--analyze-code` | boolean | false | Analyze source code (Go, Python, JavaScript) for infrastructure dependencies. |
+| `--analyze-code` | boolean | false | Analyze source code (Go, Python, JavaScript, Mendix) for infrastructure dependencies. |
 | `--skip-discovery` | boolean | false | Skip relationship discovery algorithms. |
 | `--llm-discovery` | boolean | false | Enable LLM-based discovery (opt-in, off by default). |
 | `--min-confidence F` | float | `0.5` | Minimum confidence threshold for discovered edges. |
