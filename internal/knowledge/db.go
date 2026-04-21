@@ -49,7 +49,7 @@ var stderrWriter io.Writer = os.Stderr
 
 // SchemaVersion is incremented each time the database schema changes.
 // Migrations run automatically in Migrate() when an older database is opened.
-const SchemaVersion = 6
+const SchemaVersion = 7
 
 // Database wraps an open SQLite connection and provides domain-level
 // read/write operations for indexes and knowledge graphs.
@@ -161,6 +161,8 @@ CREATE TABLE IF NOT EXISTS bm25_stats (
 -- graph_nodes: vertices in the knowledge graph.
 -- metadata is a JSON object (e.g. {"heading_level": 1, "line_range": [1,40]}).
 -- component_type classifies the node using the 12-type taxonomy (default: unknown).
+-- description: LLM-generated description of the component (nullable).
+-- tags: JSON array of tags (e.g. ["authentication", "api"]) (nullable).
 CREATE TABLE IF NOT EXISTS graph_nodes (
   id             TEXT PRIMARY KEY,
   type           TEXT NOT NULL,
@@ -168,7 +170,9 @@ CREATE TABLE IF NOT EXISTS graph_nodes (
   title          TEXT,
   content        TEXT,
   metadata       TEXT,
-  component_type TEXT NOT NULL DEFAULT 'unknown'
+  component_type TEXT NOT NULL DEFAULT 'unknown',
+  description    TEXT,
+  tags           TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_nodes_type ON graph_nodes(type);
 CREATE INDEX IF NOT EXISTS idx_nodes_component_type ON graph_nodes(component_type);
@@ -187,6 +191,20 @@ CREATE TABLE IF NOT EXISTS component_mentions (
 );
 CREATE INDEX IF NOT EXISTS idx_mentions_component ON component_mentions(component_id);
 CREATE INDEX IF NOT EXISTS idx_mentions_file ON component_mentions(file_path);
+
+-- component_aliases: maps component name variants to canonical component IDs.
+-- Used for LLM-powered name normalization (e.g., "payments-service" -> "payment-service").
+CREATE TABLE IF NOT EXISTS component_aliases (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  alias           TEXT    NOT NULL UNIQUE,
+  canonical_id    TEXT    NOT NULL,
+  normalized_by   TEXT    NOT NULL DEFAULT 'llm',
+  confidence      REAL    NOT NULL DEFAULT 1.0 CHECK (confidence >= 0.0 AND confidence <= 1.0),
+  created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+  FOREIGN KEY(canonical_id) REFERENCES graph_nodes(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_aliases_canonical ON component_aliases(canonical_id);
+CREATE INDEX IF NOT EXISTS idx_aliases_lookup ON component_aliases(alias);
 
 -- graph_edges: directed edges in the knowledge graph.
 -- confidence must be in [0.0, 1.0] (enforced by CHECK constraint).
@@ -333,6 +351,11 @@ func (db *Database) Migrate() error {
 			return fmt.Errorf("knowledge.Database.Migrate: v5→v6: %w", err)
 		}
 	}
+	if current < 7 {
+		if err := db.migrateV6ToV7(); err != nil {
+			return fmt.Errorf("knowledge.Database.Migrate: v6→v7: %w", err)
+		}
+	}
 
 	// Ensure the stored version reflects the latest schema.
 	if current < SchemaVersion {
@@ -477,6 +500,51 @@ CREATE TABLE IF NOT EXISTS code_signals (
 	indexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_code_signals_source ON code_signals(source_component)`,
 		`CREATE INDEX IF NOT EXISTS idx_code_signals_target ON code_signals(target_component)`,
+	}
+	for _, idx := range indexes {
+		if _, err := db.conn.Exec(idx); err != nil {
+			return fmt.Errorf("exec %q: %w", idx, err)
+		}
+	}
+
+	return nil
+}
+
+// migrateV6ToV7 adds LLM enrichment columns to graph_nodes and creates
+// the component_aliases table for name normalization.
+func (db *Database) migrateV6ToV7() error {
+	// Add description and tags columns to graph_nodes.
+	alterStatements := []string{
+		`ALTER TABLE graph_nodes ADD COLUMN description TEXT`,
+		`ALTER TABLE graph_nodes ADD COLUMN tags TEXT`,
+	}
+	for _, stmt := range alterStatements {
+		if _, err := db.conn.Exec(stmt); err != nil {
+			if !strings.Contains(err.Error(), "duplicate column") {
+				return fmt.Errorf("exec %q: %w", stmt, err)
+			}
+		}
+	}
+
+	// Create component_aliases table.
+	aliasesSQL := `
+CREATE TABLE IF NOT EXISTS component_aliases (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  alias           TEXT    NOT NULL UNIQUE,
+  canonical_id    TEXT    NOT NULL,
+  normalized_by   TEXT    NOT NULL DEFAULT 'llm',
+  confidence      REAL    NOT NULL DEFAULT 1.0 CHECK (confidence >= 0.0 AND confidence <= 1.0),
+  created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+  FOREIGN KEY(canonical_id) REFERENCES graph_nodes(id) ON DELETE CASCADE
+)`
+	if _, err := db.conn.Exec(aliasesSQL); err != nil {
+		return fmt.Errorf("create component_aliases: %w", err)
+	}
+
+	// Create indexes for efficient alias lookups.
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_aliases_canonical ON component_aliases(canonical_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_aliases_lookup ON component_aliases(alias)`,
 	}
 	for _, idx := range indexes {
 		if _, err := db.conn.Exec(idx); err != nil {
@@ -973,10 +1041,18 @@ func (db *Database) SaveGraph(graph *Graph) error {
 				if compType == "" {
 					compType = ComponentTypeUnknown
 				}
+				// Serialize tags as JSON array.
+				var tagsJSON *string
+				if len(n.Tags) > 0 {
+					tagsBytes, _ := json.Marshal(n.Tags)
+					tagsStr := string(tagsBytes)
+					tagsJSON = &tagsStr
+				}
 				_, err := tx.Exec(
-					`INSERT OR REPLACE INTO graph_nodes (id, type, file, title, content, metadata, component_type)
-					 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+					`INSERT OR REPLACE INTO graph_nodes (id, type, file, title, content, metadata, component_type, description, tags)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					n.ID, n.Type, n.ID /* file == ID */, n.Title, nil, nil, string(compType),
+					nullIfEmpty(n.Description), tagsJSON,
 				)
 				if err != nil {
 					return fmt.Errorf("insert graph_node %q: %w", n.ID, err)
@@ -1050,7 +1126,7 @@ func (db *Database) LoadGraph(graph *Graph) error {
 
 	// Load nodes in deterministic order (sorted by ID).
 	nRows, err := db.conn.Query(
-		`SELECT id, type, file, title, component_type FROM graph_nodes ORDER BY id ASC`,
+		`SELECT id, type, file, title, component_type, description, tags FROM graph_nodes ORDER BY id ASC`,
 	)
 	if err != nil {
 		return fmt.Errorf("knowledge.Database.LoadGraph: query graph_nodes: %w", err)
@@ -1059,15 +1135,27 @@ func (db *Database) LoadGraph(graph *Graph) error {
 
 	for nRows.Next() {
 		var id, nodeType, file string
-		var title, compType sql.NullString
-		if err := nRows.Scan(&id, &nodeType, &file, &title, &compType); err != nil {
+		var title, compType, description, tagsJSON sql.NullString
+		if err := nRows.Scan(&id, &nodeType, &file, &title, &compType, &description, &tagsJSON); err != nil {
 			return fmt.Errorf("knowledge.Database.LoadGraph: scan node: %w", err)
 		}
 		ct := ComponentType(compType.String)
 		if ct == "" {
 			ct = ComponentTypeUnknown
 		}
-		n := &Node{ID: id, Type: nodeType, Title: title.String, ComponentType: ct}
+		// Deserialize tags from JSON.
+		var tags []string
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			_ = json.Unmarshal([]byte(tagsJSON.String), &tags)
+		}
+		n := &Node{
+			ID:            id,
+			Type:          nodeType,
+			Title:         title.String,
+			ComponentType: ct,
+			Description:   description.String,
+			Tags:          tags,
+		}
 		graph.Nodes[id] = n
 	}
 	if err := nRows.Err(); err != nil {
@@ -1224,6 +1312,75 @@ func (db *Database) LoadComponentMentions() (map[string][]ComponentMention, erro
 		return result, fmt.Errorf("iterate component_mentions: %w", err)
 	}
 
+	return result, nil
+}
+
+// ─── component alias persistence ─────────────────────────────────────────────
+
+// ComponentAlias represents a name normalization mapping.
+type ComponentAlias struct {
+	Alias        string
+	CanonicalID  string
+	NormalizedBy string
+	Confidence   float64
+	CreatedAt    int64
+}
+
+// SaveComponentAliases inserts or updates component alias mappings.
+// Existing aliases with the same name are replaced.
+func (db *Database) SaveComponentAliases(aliases []ComponentAlias) error {
+	if len(aliases) == 0 {
+		return nil
+	}
+	return transaction(db.conn, func(tx *sql.Tx) error {
+		for _, a := range aliases {
+			_, err := tx.Exec(
+				`INSERT OR REPLACE INTO component_aliases (alias, canonical_id, normalized_by, confidence, created_at)
+				 VALUES (?, ?, ?, ?, ?)`,
+				a.Alias, a.CanonicalID, a.NormalizedBy, a.Confidence, a.CreatedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("insert alias %q->%q: %w", a.Alias, a.CanonicalID, err)
+			}
+		}
+		return nil
+	})
+}
+
+// ResolveComponentAlias looks up the canonical ID for a given component name variant.
+// Returns ("", false) if no mapping exists.
+func (db *Database) ResolveComponentAlias(alias string) (string, bool) {
+	var canonicalID string
+	err := db.conn.QueryRow(
+		`SELECT canonical_id FROM component_aliases WHERE alias = ?`, alias,
+	).Scan(&canonicalID)
+	if err != nil {
+		return "", false
+	}
+	return canonicalID, true
+}
+
+// LoadAllAliases returns all component alias mappings.
+func (db *Database) LoadAllAliases() (map[string]string, error) {
+	result := make(map[string]string)
+	rows, err := db.conn.Query(
+		`SELECT alias, canonical_id FROM component_aliases ORDER BY alias ASC`,
+	)
+	if err != nil {
+		return result, fmt.Errorf("query component_aliases: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var alias, canonicalID string
+		if err := rows.Scan(&alias, &canonicalID); err != nil {
+			return result, fmt.Errorf("scan alias: %w", err)
+		}
+		result[alias] = canonicalID
+	}
+	if err := rows.Err(); err != nil {
+		return result, fmt.Errorf("iterate aliases: %w", err)
+	}
 	return result, nil
 }
 

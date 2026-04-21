@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -69,6 +70,8 @@ func cmdIndex() {
 	dir := fs.String("dir", ".", "Directory to index")
 	skipDiscovery := fs.Bool("skip-discovery", false, "Skip relationship discovery")
 	llmDiscovery := fs.Bool("llm-discovery", false, "Enable LLM-based discovery")
+	llmModel := fs.String("llm-model", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "AWS Bedrock model ID")
+	llmRegion := fs.String("llm-region", "us-east-1", "AWS region for Bedrock")
 	minConfidence := fs.Float64("min-confidence", 0.5, "Minimum confidence threshold")
 	analyzeCode := fs.Bool("analyze-code", false, "Analyze source code for infrastructure dependencies")
 
@@ -192,10 +195,49 @@ func cmdIndex() {
 		})
 	}
 
+	// Run LLM-based refinement if requested.
+	if *llmDiscovery {
+		fmt.Fprintf(os.Stderr, "Running LLM-based refinement...\n")
+		if err := runLLMRefinement(absDir, graph, *llmModel, *llmRegion, *minConfidence); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: LLM refinement failed: %v\n", err)
+		}
+	}
+
 	fmt.Fprintf(os.Stderr, "Saving graph...\n")
 	if err := db.SaveGraph(graph); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving graph: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Save component aliases if LLM discovery was used.
+	if *llmDiscovery {
+		// Load aliases from cache and save to database.
+		cacheDir := filepath.Join(absDir, ".bmd-llm-cache")
+		cacheCfg := knowledge.DefaultLLMCacheConfig()
+		cacheCfg.CacheDir = cacheDir
+		cacheManager := knowledge.NewLLMCacheManager(cacheCfg)
+		if err := cacheManager.Load(); err == nil {
+			compCache := cacheManager.GetComponentCache()
+			var aliases []knowledge.ComponentAlias
+			for _, entry := range compCache.GetAllValid() {
+				if entry.NameVariant != entry.CanonicalName {
+					aliases = append(aliases, knowledge.ComponentAlias{
+						Alias:        entry.NameVariant,
+						CanonicalID:  entry.CanonicalName,
+						NormalizedBy: "llm",
+						Confidence:   entry.Confidence,
+						CreatedAt:    entry.GeneratedAt.Unix(),
+					})
+				}
+			}
+			if len(aliases) > 0 {
+				if err := db.SaveComponentAliases(aliases); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to save aliases: %v\n", err)
+				} else {
+					fmt.Fprintf(os.Stderr, "✓ Saved %d component aliases\n", len(aliases))
+				}
+			}
+		}
 	}
 
 	// Save component mentions for provenance tracking.
@@ -825,4 +867,102 @@ Examples:
 
 `)
 
+}
+
+// runLLMRefinement runs the LLM-based component and edge refinement pipeline.
+func runLLMRefinement(dir string, graph *knowledge.Graph, model, region string, minConfidence float64) error {
+	ctx := context.Background()
+
+	// Initialize LLM client.
+	llmCfg := knowledge.DefaultBedrockLLMConfig()
+	llmCfg.Model = model
+	llmCfg.AWSRegion = region
+	llmClient, err := knowledge.NewBedrockLLMClient(llmCfg)
+	if err != nil {
+		return fmt.Errorf("create llm client: %w", err)
+	}
+
+	// Initialize cache manager.
+	cacheDir := filepath.Join(dir, ".bmd-llm-cache")
+	cacheCfg := knowledge.DefaultLLMCacheConfig()
+	cacheCfg.CacheDir = cacheDir
+	cacheManager := knowledge.NewLLMCacheManager(cacheCfg)
+	if err := cacheManager.Load(); err != nil {
+		fmt.Fprintf(os.Stderr, "  Warning: failed to load cache: %v\n", err)
+	}
+
+	// Step 1: Refine components.
+	fmt.Fprintf(os.Stderr, "  Refining components with LLM...\n")
+	rawComponents := make([]*knowledge.Node, 0, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		rawComponents = append(rawComponents, node)
+	}
+
+	compResult, err := knowledge.RefineComponents(ctx, llmClient, cacheManager, rawComponents)
+	if err != nil {
+		return fmt.Errorf("refine components: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "  ✓ Component refinement: %d valid, %d false positives, %d normalized\n",
+		compResult.Stats.ValidComponents, compResult.Stats.FalsePositives, compResult.Stats.NormalizationsFound)
+
+	// Update graph nodes with enrichments.
+	validComponentSet := make(map[string]bool)
+	for _, comp := range compResult.ValidComponents {
+		if node, ok := graph.Nodes[comp.Name]; ok {
+			node.Description = comp.Description
+			node.Tags = comp.Tags
+			node.ComponentType = comp.Type
+			validComponentSet[comp.Name] = true
+		}
+	}
+
+	// Remove false positive nodes.
+	for _, fpName := range compResult.FalsePositives {
+		delete(graph.Nodes, fpName)
+	}
+
+	// Step 2: Refine edges.
+	fmt.Fprintf(os.Stderr, "  Refining edges with LLM...\n")
+	rawEdges := make([]*knowledge.Edge, 0, len(graph.Edges))
+	for _, edge := range graph.Edges {
+		rawEdges = append(rawEdges, edge)
+	}
+
+	edgeResult, err := knowledge.RefineEdges(ctx, llmClient, rawEdges, validComponentSet, minConfidence)
+	if err != nil {
+		return fmt.Errorf("refine edges: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "  ✓ Edge refinement: %d valid, %d false positives, %d low-confidence\n",
+		edgeResult.Stats.ValidEdges, edgeResult.Stats.FalsePositives, edgeResult.Stats.LowConfidenceEdges)
+
+	// Rebuild graph edges with refined edges.
+	graph.Edges = make(map[string]*knowledge.Edge)
+	graph.BySource = make(map[string][]*knowledge.Edge)
+	graph.ByTarget = make(map[string][]*knowledge.Edge)
+	for _, edge := range edgeResult.ValidEdges {
+		graph.Edges[edge.ID] = edge
+		graph.BySource[edge.Source] = append(graph.BySource[edge.Source], edge)
+		graph.ByTarget[edge.Target] = append(graph.ByTarget[edge.Target], edge)
+	}
+
+	// Save cache.
+	if err := cacheManager.Save(); err != nil {
+		fmt.Fprintf(os.Stderr, "  Warning: failed to save cache: %v\n", err)
+	}
+
+	// Print metrics.
+	metrics := llmClient.GetMetrics()
+	fmt.Fprintf(os.Stderr, "  LLM metrics: %d requests, %d tokens, avg latency %dms\n",
+		metrics.TotalRequests, metrics.TotalTokens, metrics.TotalLatencyMs/int64(max(metrics.TotalRequests, 1)))
+
+	return nil
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

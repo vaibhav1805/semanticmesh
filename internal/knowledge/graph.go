@@ -24,6 +24,14 @@ type Node struct {
 	// ComponentType classifies this node using the 12-type taxonomy
 	// (service, database, cache, etc.).  Defaults to "unknown".
 	ComponentType ComponentType
+
+	// Description is an LLM-generated description of the component.
+	// Empty for non-enriched nodes.
+	Description string
+
+	// Tags is a list of LLM-extracted tags (e.g., ["authentication", "api"]).
+	// Empty for non-enriched nodes.
+	Tags []string
 }
 
 // Graph is a directed knowledge graph where nodes represent documents and edges
