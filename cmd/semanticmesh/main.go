@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -32,16 +31,8 @@ func main() {
 		cmdIndex()
 	case "crawl":
 		cmdCrawl()
-	case "depends":
-		cmdDepends()
-	case "components":
-		cmdComponents()
-	case "list":
-		cmdList()
 	case "context":
 		cmdContext()
-	case "relationships":
-		cmdRelationships()
 	case "graph":
 		cmdGraph()
 	case "export":
@@ -54,8 +45,6 @@ func main() {
 		cmdQueryMain()
 	case "clean":
 		cmdClean()
-	case "discover":
-		cmdDiscover()
 	case "help", "-h", "--help":
 		printUsage()
 	default:
@@ -283,337 +272,10 @@ func cmdIndex() {
 }
 
 func cmdCrawl() {
-	err := knowledge.CmdCrawl(os.Args[2:])
-	if err == nil {
-		return
-	}
-	if errors.Is(err, knowledge.ErrLegacyCrawl) {
-		// Fall through to existing targeted traversal logic.
-		cmdCrawlLegacy()
-		return
-	}
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-	os.Exit(1)
-}
-
-// cmdCrawlLegacy implements the original --from-multiple targeted traversal mode.
-func cmdCrawlLegacy() {
-	fs := flag.NewFlagSet("crawl", flag.ExitOnError)
-	fromMultiple := fs.String("from-multiple", "", "Comma-separated starting files")
-	dir := fs.String("dir", ".", "Directory that was indexed")
-	direction := fs.String("direction", "backward", "Traversal direction: forward, backward, or both")
-	depth := fs.Int("depth", 3, "Max traversal depth")
-	format := fs.String("format", "json", "Output format: json, tree, dot, or list")
-
-	fs.Parse(os.Args[2:])
-
-	if *fromMultiple == "" {
-		fmt.Fprintf(os.Stderr, "Error: --from-multiple is required\n")
+	if err := knowledge.CmdCrawl(os.Args[2:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-
-	absDir, err := filepath.Abs(*dir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error resolving directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Load the graph from the indexed directory
-	dbPath := filepath.Join(absDir, ".bmd", "knowledge.db")
-	db, err := knowledge.OpenDB(dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	graph := knowledge.NewGraph()
-	if err := db.LoadGraph(graph); err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading graph: %v\n", err)
-		os.Exit(1)
-	}
-
-	startFiles := strings.Split(*fromMultiple, ",")
-	for i := range startFiles {
-		startFiles[i] = strings.TrimSpace(startFiles[i])
-	}
-
-	opts := knowledge.CrawlOptions{
-		FromFiles:     startFiles,
-		Direction:     *direction,
-		MaxDepth:      *depth,
-		IncludeCycles: false,
-	}
-
-	result := graph.CrawlMulti(opts)
-
-	switch *format {
-	case "json":
-		data, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(data))
-	case "tree":
-		// ASCII tree output
-		for node := range result.Nodes {
-			fmt.Printf("  %s\n", node)
-		}
-	case "dot":
-		// DOT format for Graphviz
-		fmt.Println("digraph {")
-		for _, edge := range graph.Edges {
-			if _, ok := result.Nodes[edge.Source]; ok {
-				if _, ok := result.Nodes[edge.Target]; ok {
-					fmt.Printf("  \"%s\" -> \"%s\";\n", edge.Source, edge.Target)
-				}
-			}
-		}
-		fmt.Println("}")
-	case "list":
-		// Simple list format
-		for node := range result.Nodes {
-			fmt.Println(node)
-		}
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown format: %s\n", *format)
-		os.Exit(1)
-	}
-}
-
-func cmdDepends() {
-	fs := flag.NewFlagSet("depends", flag.ExitOnError)
-	service := fs.String("service", "", "Service name")
-	dir := fs.String("dir", ".", "Directory that was indexed")
-	format := fs.String("format", "json", "Output format: json or text")
-	transitive := fs.Bool("transitive", false, "Include transitive dependencies")
-
-	fs.Parse(os.Args[2:])
-
-	if *service == "" && fs.NArg() > 0 {
-		*service = fs.Arg(0)
-	}
-
-	if *service == "" {
-		fmt.Fprintf(os.Stderr, "Error: service name is required\n")
-		os.Exit(1)
-	}
-
-	absDir, err := filepath.Abs(*dir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error resolving directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Load the graph
-	dbPath := filepath.Join(absDir, ".bmd", "knowledge.db")
-	db, err := knowledge.OpenDB(dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	graph := knowledge.NewGraph()
-	if err := db.LoadGraph(graph); err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading graph: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Find dependencies
-	deps := make(map[string]int)
-	if *transitive {
-		// BFS for transitive dependencies
-		visited := make(map[string]bool)
-		queue := []string{*service}
-		for len(queue) > 0 {
-			current := queue[0]
-			queue = queue[1:]
-			if visited[current] {
-				continue
-			}
-			visited[current] = true
-			for _, edge := range graph.Edges {
-				if edge.Source == current && edge.Target != *service {
-					deps[edge.Target]++
-					if !visited[edge.Target] {
-						queue = append(queue, edge.Target)
-					}
-				}
-			}
-		}
-	} else {
-		// Direct dependencies only
-		for _, edge := range graph.Edges {
-			if edge.Source == *service && edge.Target != *service {
-				deps[edge.Target]++
-			}
-		}
-	}
-
-	if *format == "json" {
-		data, _ := json.MarshalIndent(deps, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		for dep := range deps {
-			fmt.Println(dep)
-		}
-	}
-}
-
-func cmdComponents() {
-	fs := flag.NewFlagSet("components", flag.ExitOnError)
-	dir := fs.String("dir", ".", "Directory that was indexed")
-	format := fs.String("format", "json", "Output format: json or text")
-
-	fs.Parse(os.Args[2:])
-
-	absDir, err := filepath.Abs(*dir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error resolving directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Load the graph to extract components
-	dbPath := filepath.Join(absDir, ".bmd", "knowledge.db")
-	db, err := knowledge.OpenDB(dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	graph := knowledge.NewGraph()
-	if err := db.LoadGraph(graph); err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading graph: %v\n", err)
-		os.Exit(1)
-	}
-
-	components := make(map[string]int)
-	for node := range graph.Nodes {
-		components[node]++
-	}
-
-	if *format == "json" {
-		data, _ := json.MarshalIndent(components, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		for comp := range components {
-			fmt.Println(comp)
-		}
-	}
-}
-
-func cmdList() {
-	fs := flag.NewFlagSet("list", flag.ExitOnError)
-	dir := fs.String("dir", ".", "Directory that was indexed")
-	typeName := fs.String("type", "", "Filter by component type (e.g. service, database, cache)")
-	includeTags := fs.Bool("include-tags", false, "Include tag-based matches in addition to primary type matches")
-
-	fs.Parse(os.Args[2:])
-
-	if *typeName == "" {
-		fmt.Fprintf(os.Stderr, "Error: --type is required\n")
-		fmt.Fprintf(os.Stderr, "Usage: semanticmesh list --type TYPE [--include-tags]\n")
-		fmt.Fprintf(os.Stderr, "\nValid types: ")
-		for _, ct := range knowledge.AllComponentTypes() {
-			fmt.Fprintf(os.Stderr, "%s ", string(ct))
-		}
-		fmt.Fprintf(os.Stderr, "\n")
-		os.Exit(1)
-	}
-
-	ct := knowledge.ComponentType(*typeName)
-
-	absDir, err := filepath.Abs(*dir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error resolving directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Load the graph from the indexed directory.
-	dbPath := filepath.Join(absDir, ".bmd", "knowledge.db")
-	db, err := knowledge.OpenDB(dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	graph := knowledge.NewGraph()
-	if err := db.LoadGraph(graph); err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading graph: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Collect results.
-	type listResult struct {
-		Name       string  `json:"name"`
-		ID         string  `json:"id"`
-		Type       string  `json:"type"`
-		MatchType  string  `json:"match_type"`
-		Confidence float64 `json:"confidence"`
-		File       string  `json:"file"`
-	}
-
-	var results []listResult
-	primaryCount := 0
-	tagCount := 0
-
-	for _, node := range graph.Nodes {
-		if node.ComponentType == ct {
-			// Primary type match.
-			results = append(results, listResult{
-				Name:       node.Title,
-				ID:         node.ID,
-				Type:       string(node.ComponentType),
-				MatchType:  "primary",
-				Confidence: 1.0, // Exact type match.
-				File:       node.ID,
-			})
-			primaryCount++
-		} else if *includeTags {
-			// Tag-based match: check if the node's name or title contains the type keyword.
-			inferredType, inferredConf := knowledge.InferComponentType(node.ID, node.Title)
-			if inferredType == ct {
-				results = append(results, listResult{
-					Name:       node.Title,
-					ID:         node.ID,
-					Type:       string(node.ComponentType),
-					MatchType:  "tag",
-					Confidence: inferredConf,
-					File:       node.ID,
-				})
-				tagCount++
-			}
-		}
-	}
-
-	// Build output.
-	type listOutput struct {
-		Components []listResult `json:"components"`
-		Summary    struct {
-			Type         string `json:"type"`
-			Mode         string `json:"mode"`
-			PrimaryCount int    `json:"primary_count"`
-			TagCount     int    `json:"tag_count"`
-			TotalCount   int    `json:"total_count"`
-		} `json:"summary"`
-	}
-
-	output := listOutput{Components: results}
-	if output.Components == nil {
-		output.Components = []listResult{}
-	}
-	output.Summary.Type = *typeName
-	if *includeTags {
-		output.Summary.Mode = "inclusive"
-	} else {
-		output.Summary.Mode = "strict"
-	}
-	output.Summary.PrimaryCount = primaryCount
-	output.Summary.TagCount = tagCount
-	output.Summary.TotalCount = primaryCount + tagCount
-
-	data, _ := json.MarshalIndent(output, "", "  ")
-	fmt.Println(string(data))
 }
 
 func cmdContext() {
@@ -664,65 +326,6 @@ func cmdContext() {
 		fmt.Printf("Context for: %s\n", query)
 		for _, section := range result.Sections {
 			fmt.Printf("  - %s\n", section)
-		}
-	}
-}
-
-func cmdRelationships() {
-	fs := flag.NewFlagSet("relationships", flag.ExitOnError)
-	dir := fs.String("dir", ".", "Directory that was indexed")
-	format := fs.String("format", "json", "Output format: json or text")
-	minConfidence := fs.Float64("min-confidence", 0.0, "Minimum confidence threshold")
-
-	fs.Parse(os.Args[2:])
-
-	absDir, err := filepath.Abs(*dir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error resolving directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Load the graph
-	dbPath := filepath.Join(absDir, ".bmd", "knowledge.db")
-	db, err := knowledge.OpenDB(dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	graph := knowledge.NewGraph()
-	if err := db.LoadGraph(graph); err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading graph: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Filter edges by confidence
-	type edgeInfo struct {
-		Source     string  `json:"source"`
-		Target     string  `json:"target"`
-		Type       string  `json:"type"`
-		Confidence float64 `json:"confidence"`
-	}
-
-	var edges []edgeInfo
-	for _, edge := range graph.Edges {
-		if edge.Confidence >= *minConfidence {
-			edges = append(edges, edgeInfo{
-				Source:     edge.Source,
-				Target:     edge.Target,
-				Type:       string(edge.Type),
-				Confidence: edge.Confidence,
-			})
-		}
-	}
-
-	if *format == "json" {
-		data, _ := json.MarshalIndent(edges, "", "  ")
-		fmt.Println(string(data))
-	} else {
-		for _, edge := range edges {
-			fmt.Printf("%s -> %s (%s, %.2f)\n", edge.Source, edge.Target, edge.Type, edge.Confidence)
 		}
 	}
 }
@@ -816,47 +419,33 @@ func cmdClean() {
 	fmt.Fprintf(os.Stderr, "✓ Clean complete\n")
 }
 
-func cmdDiscover() {
-	fmt.Println("Discovery subcommand - not yet implemented")
-	os.Exit(1)
-}
-
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `semanticmesh - intelligent graph discovery service for markdown documentation
+	fmt.Fprintf(os.Stderr, `semanticmesh - dependency graph analyzer for infrastructure documentation and source code
 
 Usage:
   semanticmesh <command> [options]
 
-Commands:
-  index           Run discovery algorithms on documentation
-  crawl           Traverse the dependency graph from starting files
-  depends         Show service dependencies
-  components      List discovered components
-  list            List components filtered by type
-  context         Assemble RAG context for a query
-  relationships   List discovered relationships with confidence scores
-  graph           Export the full dependency graph
-  export          Package knowledge as a ZIP archive
+Core Commands:
+  export          Package knowledge as a ZIP archive (scan + discover + package)
   import          Load an exported graph ZIP into persistent storage
-  mcp             Start MCP server for LLM agent access (stdio transport)
   query impact    Query downstream impact of a component failure
   query deps      Query what a component depends on
   query path      Find paths between two components
   query list      List components with optional filters
+  mcp             Start MCP server for LLM agent access (stdio transport)
+
+Legacy Commands (local .bmd/ workflow):
+  index           Run discovery algorithms on documentation
+  crawl           Preview graph statistics before exporting
+  context         Assemble RAG context for a query
+  graph           Export the full dependency graph as JSON or DOT
+
+Utilities:
   clean           Remove all BMD artifacts from directory
-  discover        Run semantic discovery (experimental)
   help            Show this help message
 
 Examples:
-  semanticmesh index --dir ./docs
-  semanticmesh crawl --from-multiple api.md,auth.md --direction backward
-  semanticmesh depends --service api-gateway --dir ./docs
-  semanticmesh components --dir ./docs --format json
-  semanticmesh list --type service --dir ./docs
-  semanticmesh list --type database --include-tags --dir ./docs
-  semanticmesh context "how does auth work" --dir ./docs
-  semanticmesh relationships --dir ./docs --min-confidence 0.8
-  semanticmesh graph --dir ./docs --format dot
+  # Modern workflow (recommended)
   semanticmesh export --input ./docs --output graph.zip
   semanticmesh import graph.zip --name prod-infra
   semanticmesh query impact --component payment-api
@@ -864,6 +453,12 @@ Examples:
   semanticmesh query path --from web-frontend --to primary-db
   semanticmesh query list --type service --min-confidence 0.7
   semanticmesh mcp
+
+  # Legacy workflow
+  semanticmesh index --dir ./docs
+  semanticmesh crawl --input ./docs --format json
+  semanticmesh context "how does auth work" --dir ./docs
+  semanticmesh graph --dir ./docs --format dot
 
 `)
 

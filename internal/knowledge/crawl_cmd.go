@@ -18,17 +18,11 @@ import (
 	"github.com/vaibhav1805/semanticmesh/internal/code/tfparser"
 )
 
-// ErrLegacyCrawl is a sentinel error returned by CmdCrawl when the
-// --from-multiple flag is set, signaling that main.go should fall back
-// to the existing targeted traversal logic.
-var ErrLegacyCrawl = fmt.Errorf("legacy crawl mode requested")
-
 // CrawlArgs holds parsed arguments for the crawl command.
 type CrawlArgs struct {
-	Input        string // source directory (--input flag)
-	Format       string // output format: text or json (--format flag)
-	FromMultiple string // backward compat for targeted traversal (--from-multiple flag)
-	AnalyzeCode  bool   // analyze source code for infrastructure dependencies
+	Input       string // source directory (--input flag)
+	Format      string // output format: text or json (--format flag)
+	AnalyzeCode bool   // analyze source code for infrastructure dependencies
 }
 
 // ParseCrawlArgs parses raw CLI arguments for the crawl command.
@@ -39,7 +33,6 @@ func ParseCrawlArgs(args []string) (*CrawlArgs, error) {
 	var a CrawlArgs
 	fs.StringVar(&a.Input, "input", ".", "Source directory to crawl")
 	fs.StringVar(&a.Format, "format", "text", "Output format: text or json")
-	fs.StringVar(&a.FromMultiple, "from-multiple", "", "Comma-separated starting files (legacy targeted traversal)")
 	fs.BoolVar(&a.AnalyzeCode, "analyze-code", false, "Analyze source code for infrastructure dependencies")
 
 	if err := fs.Parse(args); err != nil {
@@ -61,11 +54,6 @@ func CmdCrawl(args []string) error {
 	a, err := ParseCrawlArgs(args)
 	if err != nil {
 		return err
-	}
-
-	// If --from-multiple is set, signal legacy mode.
-	if a.FromMultiple != "" {
-		return ErrLegacyCrawl
 	}
 
 	absInput, err := filepath.Abs(a.Input)
