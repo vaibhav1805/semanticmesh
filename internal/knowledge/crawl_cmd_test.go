@@ -2,7 +2,6 @@ package knowledge
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -153,12 +152,4 @@ func TestCmdCrawl_EmptyDir(t *testing.T) {
 	}
 }
 
-func TestCmdCrawl_LegacyFallback(t *testing.T) {
-	err := CmdCrawl([]string{"--from-multiple", "api.md,auth.md"})
-	if err == nil {
-		t.Fatal("expected ErrLegacyCrawl, got nil")
-	}
-	if !errors.Is(err, ErrLegacyCrawl) {
-		t.Fatalf("expected ErrLegacyCrawl, got: %v", err)
-	}
-}
+// TestCmdCrawl_LegacyFallback removed - legacy --from-multiple flag no longer supported

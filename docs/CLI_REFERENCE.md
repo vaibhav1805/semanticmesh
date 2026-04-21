@@ -6,6 +6,8 @@ Complete reference documentation for the semanticmesh command-line interface.
 
 ## Commands Overview
 
+### Core Commands (Recommended Workflow)
+
 | Command | Description |
 |---------|-------------|
 | `semanticmesh export` | Scan, detect, and package a dependency graph as a ZIP archive |
@@ -14,10 +16,16 @@ Complete reference documentation for the semanticmesh command-line interface.
 | `semanticmesh query dependencies` | Query what a component depends on |
 | `semanticmesh query path` | Find dependency paths between two components |
 | `semanticmesh query list` | List components with optional filters |
-| `semanticmesh crawl` | Preview graph statistics before exporting |
 | `semanticmesh mcp` | Start MCP server for LLM agent access (stdio transport) |
-| `semanticmesh index` | Build component graph from markdown (legacy) |
-| `semanticmesh list` | List components filtered by type (legacy) |
+
+### Legacy Commands (Local .bmd/ Workflow)
+
+| Command | Description |
+|---------|-------------|
+| `semanticmesh index` | Build component graph from markdown in `.bmd/` directory |
+| `semanticmesh crawl` | Preview graph statistics before exporting |
+| `semanticmesh context` | Assemble RAG context sections for a query |
+| `semanticmesh graph` | Export the full graph as JSON or DOT format |
 | `semanticmesh clean` | Remove all BMD artifacts from a directory |
 
 ---
@@ -38,9 +46,9 @@ semanticmesh export [FLAGS]
 |------|------|---------|-------------|
 | `--input PATH` | string | `.` | Source directory to scan. Alias: `--from`. |
 | `--output FILE` | string | `graph.zip` | Output ZIP file path. `.zip` extension added automatically if missing. |
-| `--analyze-code` | boolean | false | Analyze source code (Go, Python, JavaScript) for infrastructure dependencies. |
+| `--analyze-code` | boolean | false | Analyze source code (Go, Python, JavaScript, Terraform) for infrastructure dependencies. |
 | `--skip-discovery` | boolean | false | Skip relationship discovery algorithms. |
-| `--llm-discovery` | boolean | false | Enable LLM-based discovery (opt-in, off by default). |
+| `--llm-discovery` | boolean | false | Enable LLM-based discovery (opt-in, off by default). Requires AWS Bedrock access. |
 | `--min-confidence F` | float | `0.5` | Minimum confidence threshold for discovered edges. |
 | `--version STRING` | string | `1.0.0` | Semantic version tag embedded in the archive metadata. |
 | `--git-version` | boolean | false | Auto-detect version from `git describe --tags`. |
@@ -408,7 +416,6 @@ semanticmesh crawl [FLAGS]
 | `--input PATH` | string | `.` | Source directory to crawl. |
 | `--format text\|json` | string | `text` | Output format. |
 | `--analyze-code` | boolean | false | Include source code analysis. |
-| `--from-multiple FILES` | string | (none) | Legacy targeted traversal mode (comma-separated starting files). |
 
 ### Examples
 
@@ -488,83 +495,63 @@ Example configuration for Claude Desktop (`claude_desktop_config.json`):
 
 ---
 
-## semanticmesh index — Build Component Graph (Legacy)
+## Legacy Commands
 
-Index markdown documents, detect component types, and persist results to a local SQLite database. This is the original indexing command; for portable graphs, prefer `export` + `import`.
+The following commands operate on locally indexed graphs (`.bmd/` directory). For production use, prefer the modern `export` → `import` → `query` workflow.
 
-### Syntax
+### semanticmesh index — Build Component Graph
 
+Index markdown documents, detect component types, and persist results to a local SQLite database in `.bmd/`.
+
+**Syntax:**
 ```bash
-semanticmesh index [FLAGS]
+semanticmesh index --dir PATH [FLAGS]
 ```
 
-### Flags
+**Flags:**
+- `--dir PATH` - Directory to index (default: `.`)
+- `--skip-discovery` - Skip relationship discovery algorithms
+- `--llm-discovery` - Enable LLM-based discovery (requires AWS Bedrock)
+- `--min-confidence F` - Minimum confidence threshold (default: `0.5`)
+- `--analyze-code` - Analyze source code for infrastructure dependencies
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--dir PATH` | string | `.` | Directory to index. |
-| `--skip-discovery` | boolean | false | Skip relationship discovery algorithms. |
-| `--llm-discovery` | boolean | false | Enable LLM-based discovery. |
-| `--min-confidence F` | float | `0.5` | Minimum confidence threshold. |
-| `--analyze-code` | boolean | false | Analyze source code for infrastructure dependencies. |
+---
 
-### Examples
+### semanticmesh context — Assemble RAG Context
 
+Assemble RAG context sections for a query from indexed documents.
+
+**Syntax:**
 ```bash
-semanticmesh index --dir ./docs
-semanticmesh index --dir ./project --analyze-code
+semanticmesh context QUERY --dir PATH [FLAGS]
+```
+
+**Flags:**
+- `--dir PATH` - Directory to search (default: `.`)
+- `--format markdown|json` - Output format (default: `markdown`)
+- `--top N` - Max sections to return (default: `5`)
+
+---
+
+### semanticmesh graph — Export Graph
+
+Export the full dependency graph as JSON or DOT format for visualization.
+
+**Syntax:**
+```bash
+semanticmesh graph --dir PATH [--format json|dot]
 ```
 
 ---
 
-## semanticmesh list — Query Components by Type (Legacy)
-
-List components from the indexed graph, filtered by type. For querying imported graphs, prefer `semanticmesh query list`.
-
-### Syntax
-
-```bash
-semanticmesh list --type TYPE [FLAGS]
-```
-
-### Flags
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--type TYPE` | string | (required) | Filter by component type. |
-| `--include-tags` | boolean | false | Include tag-based matches in addition to primary type matches. |
-| `--dir PATH` | string | `.` | Directory that was indexed. |
-
-### Examples
-
-```bash
-semanticmesh list --type service --dir ./docs
-semanticmesh list --type database --include-tags --dir ./docs
-```
-
----
-
-## semanticmesh clean — Remove Artifacts
+### semanticmesh clean — Remove Artifacts
 
 Remove the `.bmd/` directory and all indexed data from a directory.
 
-### Syntax
-
+**Syntax:**
 ```bash
 semanticmesh clean [--dir PATH]
 ```
-
----
-
-## Other Commands
-
-| Command | Description |
-|---------|-------------|
-| `semanticmesh depends --service NAME` | Show service dependencies (direct or `--transitive`). |
-| `semanticmesh components --dir PATH` | List all discovered component names. |
-| `semanticmesh context QUERY --dir PATH` | Assemble RAG context sections for a query. |
-| `semanticmesh relationships --dir PATH` | List discovered relationships with confidence scores. |
-| `semanticmesh graph --dir PATH` | Export the full graph as JSON or DOT format. |
 
 ---
 

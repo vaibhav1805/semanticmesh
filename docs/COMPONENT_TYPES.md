@@ -6,8 +6,8 @@ Every component in your infrastructure carries a type classification that enable
 
 Components are the building blocks of your infrastructure documentation. Each component must be assigned a **primary type** (required) and may carry optional **tags** for additional metadata.
 
-- **Primary type:** The primary classification (service, database, cache, etc.). Used for filtering with `semanticmesh list --type`.
-- **Tags:** Optional secondary metadata (criticality, deployment model, compliance status, etc.). Searchable via `--include-tags` flag.
+- **Primary type:** The primary classification (service, database, cache, etc.). Used for filtering with `semanticmesh query list --type`.
+- **Tags:** Optional secondary metadata (criticality, deployment model, compliance status, etc.).
 - **Confidence score:** A measure of detection reliability (0.4–1.0). Higher confidence indicates stronger inference evidence.
 
 All 12 core types are built into semanticmesh. Users can also define custom types via seed configuration (see docs/CONFIGURATION.md).
@@ -283,17 +283,6 @@ Primary types capture the main category, but components may have additional meta
 }
 ```
 
-**Using tags in queries:**
-By default, `semanticmesh list --type TYPE` returns only components with that primary type. To also include components tagged with the type:
-
-```bash
-semanticmesh list --type database --include-tags
-```
-
-This would return:
-- All components with `type: "database"`
-- All components with `database` in their tags (but different primary type)
-
 ---
 
 ## Workflow: Querying by Type
@@ -301,16 +290,18 @@ This would return:
 ### List all services
 
 ```bash
-semanticmesh list --type service --output json
+semanticmesh query list --type service
 ```
 
-**Response:** All components with `type: "service"`, ordered by confidence.
+Returns all components with `type: "service"` in structured JSON format with confidence scores.
 
-### Find critical databases
+### Filter by confidence
 
 ```bash
-semanticmesh list --type database --include-tags --output json | jq '.components[] | select(.tags[]? | contains("critical"))'
+semanticmesh query list --type database --min-confidence 0.8
 ```
+
+Returns only high-confidence database components (confidence ≥ 0.8).
 
 **Response:** Databases or components tagged as critical.
 
